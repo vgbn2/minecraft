@@ -1,6 +1,6 @@
 # Project State
 
-Status: Crafty source control plane implemented; world adoption is NO-GO pending dimension recovery
+Status: first Crafty control-plane beta committed and pushed; qualification next; world adoption remains NO-GO
 
 ## Tracked scope
 

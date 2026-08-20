@@ -14,6 +14,7 @@
 - Canonical engineering documentation now lives under `docs/`; `workspace/code-atlas` and old multi-tenant plans are historical/navigation evidence only.
 - Crafty is the sole server catalog/lifecycle authority. `mcctl` owns only API access, immutable profiles, start admission/locking, monitoring/alerts, and read-only audits.
 - On 2026-08-20 `steamlinux` had no Minecraft container or image. `data/` is later than the local `world*` siblings; logs prove the siblings came from an earlier clean run. Never pair them for migration without independent matching evidence.
+- First Crafty control-plane beta source commit `f5938563cbf34bb4828e22910d42ad43ea833506` was pushed to `origin/main` on 2026-08-20. Next work is non-live testing, load/logging analysis, and concurrency stress; deployment authority does not carry forward.
 
 ## Evidence boundaries
 
