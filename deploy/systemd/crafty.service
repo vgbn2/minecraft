@@ -1,0 +1,33 @@
+[Unit]
+Description=Crafty Controller 4.10.8
+After=network-online.target time-sync.target local-fs.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=simple
+User=crafty
+Group=crafty
+WorkingDirectory=/opt/crafty/4.10.8
+ExecStart=/opt/crafty/4.10.8/.venv/bin/python /opt/crafty/4.10.8/main.py
+Restart=on-failure
+RestartSec=10s
+UMask=0027
+CPUWeight=50
+IOWeight=50
+MemoryHigh=8G
+MemoryMax=9G
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+ReadWritePaths=/var/lib/crafty /srv/minecraft/servers /srv/minecraft/recovery-points /var/lib/mcctl /run/mcctl /run/lock
+
+[Install]
+WantedBy=multi-user.target

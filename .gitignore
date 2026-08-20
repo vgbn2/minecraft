@@ -36,3 +36,16 @@ plugins/spark/tmp/
 .idea/
 .vscode/
 *.swp
+
+# Control-plane build and generated runtime artifacts
+.cache/
+dist/
+control-plane/runtime/
+*.db
+*.db-shm
+*.db-wal
+
+# Native control-plane secrets and deployment-local state
+deploy/secrets/
+*.token
+current-state.json

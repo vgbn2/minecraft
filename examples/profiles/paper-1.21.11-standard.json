@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "id": "paper-1-21-11-authme",
+  "approved": true,
+  "server_type": "paper",
+  "minecraft_version": "1.21.11",
+  "java_version": 21,
+  "artifact": {
+    "kind": "paper",
+    "version": "1.21.11",
+    "build": "132",
+    "download_url": "https://fill-data.papermc.io/v1/objects/5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba/paper-1.21.11-132.jar",
+    "sha256": "5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba"
+  },
+  "plugins": [
+    {"id": "authme", "version": "6.0.0", "download_url": "https://github.com/AuthMe/AuthMeReloaded/releases/download/6.0.0/AuthMe-6.0.0-Paper.jar", "sha256": "58948fcbc697497506257d09d8a7909bf48de6aefe7bec6ba5ab4c41be41b7b8"},
+    {"id": "packetevents", "version": "2.13.0", "download_url": "https://github.com/retrooper/packetevents/releases/download/v2.13.0/packetevents-spigot-2.13.0.jar", "sha256": "6d9ece0d87ee727a79a20b7ffbd432021609c6f52bafcb654fc2d3e9b6f064c5"}
+  ],
+  "mods": [],
+  "resources": {"heap_initial_mb": 2048, "heap_max_mb": 4096},
+  "security": {"online_mode": false, "offline_auth_plugin": "AuthMe", "threat_review": "docs/architecture/network-and-security.md#paper-offline-authentication"},
+  "crafty_server_id": "11111111-1111-4111-8111-111111111111",
+  "server_root": "/srv/minecraft/servers/paper-main",
+  "port": 25565,
+  "compatibility_evidence": "docs/profiles/compatibility-matrix.md#paper-12111"
+}

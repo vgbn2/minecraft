@@ -1,0 +1,23 @@
+{
+  "schema_version": 2,
+  "id": "fabric-1-21-11-standard",
+  "approved": true,
+  "server_type": "fabric",
+  "minecraft_version": "1.21.11",
+  "java_version": 21,
+  "artifact": {
+    "kind": "fabric",
+    "version": "1.21.11",
+    "build": "loader-0.19.3-installer-1.1.2",
+    "download_url": "https://meta.fabricmc.net/v2/versions/loader/1.21.11/0.19.3/1.1.2/server/jar",
+    "sha256": "b855772f5a5d591262260e8ed3c218419366d74c3acfc38409f4a376f167051b"
+  },
+  "plugins": [],
+  "mods": [],
+  "resources": {"heap_initial_mb": 1024, "heap_max_mb": 2560},
+  "security": {"online_mode": true},
+  "crafty_server_id": "22222222-2222-4222-8222-222222222222",
+  "server_root": "/srv/minecraft/servers/fabric-secondary",
+  "port": 25566,
+  "compatibility_evidence": "docs/profiles/compatibility-matrix.md#fabric-12111"
+}

@@ -1,12 +1,16 @@
 # Project State
 
-Status: initialized and published to private GitHub repository
+Status: Crafty source control plane implemented; world adoption is NO-GO pending dimension recovery
 
 ## Tracked scope
 
 - Docker image and Compose definitions
 - Safe configuration templates and non-secret Paper configuration
-- Project and continuity documentation
+- Canonical Crafty architecture, operations, profile, security, and source documentation
+- Pinned Crafty OpenAPI required-operation contract and Paper/Fabric profiles
+- Tracked agent Code Atlas with deterministic inventory checking
+- Crafty API client, profile/runtime verification, admission gate, monitor/alerts, corruption recovery, and ownership audit
+- Reviewed native Crafty/monitor systemd templates; not deployed
 
 ## Untracked operational scope
 
@@ -17,6 +21,8 @@ Status: initialized and published to private GitHub repository
 
 No deployment, recovery, backup restore, or live-server qualification has been completed by this repository bootstrap.
 
-## Open operational question
+The current `mcctl` surface is a Crafty v2 client, immutable-profile validator, fail-closed `gate exec` wrapper, Linux/Crafty sampler, WAL monitoring/alert store, ownership audit, and Code Atlas checker. Crafty is the sole server catalog/lifecycle owner. The obsolete tenant catalog, Compose renderer, and lifecycle state machine were removed.
 
-The current Compose file persists `./data` as `/opt/minecraft/world`. Nether and End persistence paths must be verified against the intended active dataset before changing mounts or recreating the container.
+## Open operational blocker
+
+On `steamlinux`, no Minecraft container or image remains. `data/` is a later active Overworld, while the local `world*` sibling set is proven by logs to come from an earlier fresh run. Matching Nether/End and server-root metadata must be recovered from the original host/container/export/backup before any Crafty import or start.

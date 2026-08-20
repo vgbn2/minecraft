@@ -1,43 +1,16 @@
-# Minecraft Paper Server
+# Crafty-Managed Minecraft Servers
 
-Docker-based Paper server configuration for Minecraft 1.21.11.
+This repository defines a Crafty-based control plane for an existing Paper 1.21.11 world and a separately qualified Fabric 1.21.11 server. Crafty is the sole catalog and lifecycle authority. `mcctl` supplies immutable profiles, Crafty API access, a fail-closed JVM admission wrapper, lightweight monitoring, alerts, and audits.
 
-## Requirements
+Start with [the canonical documentation](docs/README.md). The legacy Docker files are retained only as current-server rollback and migration evidence; `mcctl` no longer renders or owns Compose projects.
 
-- Docker Engine with Docker Compose v2
-- At least 5 GB of memory available to the container
+## Source verification
 
-## First-time setup
+```bash
+make verify
+./tools/go.sh go run ./cmd/mcctl config validate --file examples/mcctl.config.json
+./tools/go.sh go run ./cmd/mcctl profile validate --file examples/profiles/paper-1.21.11-standard.json
+./tools/go.sh go run ./cmd/mcctl profile validate --file examples/profiles/fabric-1.21.11-standard.json
+```
 
-1. Copy the safe configuration template:
-
-   ```bash
-   cp server.properties.example server.properties
-   ```
-
-2. Review `server.properties`. Keep `online-mode=true` for an Internet-facing server unless a trusted proxy performs authentication.
-3. Build and start the server:
-
-   ```bash
-   docker compose up -d --build
-   ```
-
-4. Inspect startup output:
-
-   ```bash
-   docker compose logs -f minecraft
-   ```
-
-## Repository boundaries
-
-Git tracks the Docker definition, safe server configuration templates, Paper configuration, and maintenance documentation. It intentionally excludes downloaded JARs, generated libraries, logs, plugin caches, player lists, credentials, and world data.
-
-World data requires a separate backup process. A successful Git push is not a world backup or proof that the server is deployable, recoverable, or healthy.
-
-## Routine maintenance
-
-- Review Paper release notes before changing the pinned version/build in `Dockerfile`.
-- Back up world data before Paper, Minecraft, plugin, or configuration upgrades.
-- Run `docker compose config` before deployment.
-- Validate upgrades on a copied world before using them on the active server.
-- Update the files under `workspace/` when project direction or operational evidence changes.
+These checks do not install Crafty, start Java, touch worlds, perform backups, deploy to the HP Desk, qualify recovery, or prove a soak.

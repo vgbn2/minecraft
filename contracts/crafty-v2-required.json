@@ -1,0 +1,14 @@
+{
+  "openapi": "3.0.4",
+  "api_version": "2.0.1",
+  "source": "https://docs.craftycontrol.com/pages/developer-guide/api-reference/openapi-spec.yml",
+  "source_sha256": "bfadb88c5bba1996e2a5ffe6102f266ba257eae662470f6210896c16518dfb3b",
+  "required_operations": [
+    {"method": "GET", "path": "/api/v2/servers"},
+    {"method": "GET", "path": "/api/v2/servers/{serverID}/stats"},
+    {"method": "POST", "path": "/api/v2/servers/{serverID}/action/{action}"},
+    {"method": "GET", "path": "/metrics"},
+    {"method": "GET", "path": "/metrics/host"},
+    {"method": "GET", "path": "/metrics/servers/{serverID}"}
+  ]
+}
