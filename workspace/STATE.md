@@ -1,6 +1,6 @@
 # Project State
 
-Status: Crafty control-plane beta qualification committed and pushed; world adoption remains NO-GO
+Status: Crafty beta committed; product and code direction awaiting documentation-only reassessment; world adoption remains NO-GO
 
 ## Tracked scope
 
@@ -24,6 +24,10 @@ No deployment, recovery, backup restore, or live-server qualification has been c
 The current `mcctl` surface is a Crafty v2 client, immutable-profile validator, fail-closed `gate exec` wrapper, Linux/Crafty sampler, WAL monitoring/alert store, ownership audit, and Code Atlas checker. Crafty is the sole server catalog/lifecycle owner. The obsolete tenant catalog, Compose renderer, and lifecycle state machine were removed.
 
 The qualification source at `96dd06a56de312dc57de083acaba26398cd0f093` adds a testable startgate owner, matching-PID failed-exec cleanup, snapshot v2 redacted issue codes with v1 readers, metric rollups/checkpointing, structured redacted diagnostics, durable alert hysteresis/deduplication/reminder-attempt state, notifier mocks, and bounded disposable load evidence. It is pushed to `origin/main`; it is not deployment or runtime qualification.
+
+## Direction under reassessment
+
+The desired product is a simple Crafty-backed web experience for users, tenants, isolated servers/world sets, and server-pinned version profiles. The user is not satisfied with the current custom-code shape and specifically identified excessive magic numbers. The next session is dedicated to documentation and README work: clarify the product and present status, reconcile stale/superseded explanations, inventory those values, separate configurable policy from fixed contracts, and decide which custom `mcctl` surfaces should remain, be simplified, or be removed.
 
 ## Open operational blocker
 

@@ -16,6 +16,7 @@
 - On 2026-08-20 `steamlinux` had no Minecraft container or image. `data/` is later than the local `world*` siblings; logs prove the siblings came from an earlier clean run. Never pair them for migration without independent matching evidence.
 - First Crafty control-plane beta source commit `f5938563cbf34bb4828e22910d42ad43ea833506` was pushed to `origin/main` on 2026-08-20. Next work is non-live testing, load/logging analysis, and concurrency stress; deployment authority does not carry forward.
 - On 2026-08-20 beta qualification source commit `96dd06a56de312dc57de083acaba26398cd0f093` was pushed to `origin/main`. It adds fake-Crafty, concurrency, failed-exec recovery, snapshot-v2 diagnostics, rollups, durable alert-attempt throttling, notifier mocks, redaction, and disposable load evidence. The final load gate measured 0.0149% projected CPU, 35.19 MiB peak RSS, and 100.61 ms average Linux-probe latency. This is not Crafty/Minecraft host, deployment, recovery, or soak proof.
+- On 2026-08-20 the user redirected the next session to documentation-only product/code reassessment. The target is a simple web experience with tenant-owned servers/world sets and server-pinned version profiles; the current Go code must be reviewed for excessive magic numbers and unnecessary custom ownership before implementation resumes.
 
 ## Evidence boundaries
 

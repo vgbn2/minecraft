@@ -8,6 +8,7 @@ This directory is the canonical engineering documentation. Crafty Controller is 
 - [Data and backup](architecture/data-and-backup.md)
 - [Network and security](architecture/network-and-security.md)
 - [HP Desk adoption](operations/hpdesk-adoption.md)
+- [HP Desk management-code release sync](operations/hpdesk-adoption.md#management-code-release-sync)
 - [Backup and restore](operations/backup-and-restore.md)
 - [Incident response](operations/incident-response.md)
 - [Upgrade and rollback](operations/upgrade-and-rollback.md)
