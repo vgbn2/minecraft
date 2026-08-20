@@ -79,7 +79,7 @@ func unmanagedJava(serverRoot string, profiles []model.Profile) []Finding {
 			}
 		}
 		if !managed {
-			findings = append(findings, Finding{"warning", "unmanaged_java", fmt.Sprintf("pid=%d command=%s", pid, command)})
+			findings = append(findings, Finding{"warning", "unmanaged_java", fmt.Sprintf("pid=%d executable=java", pid)})
 		}
 	}
 	return findings

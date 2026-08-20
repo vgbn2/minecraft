@@ -103,28 +103,34 @@ type ServerMetric struct {
 	OOMEvidence    bool   `json:"oom_evidence"`
 }
 
+type CollectionIssue struct {
+	Code      string `json:"code"`
+	Component string `json:"component"`
+}
+
 type Snapshot struct {
-	SchemaVersion       int            `json:"schema_version"`
-	SampledAt           time.Time      `json:"sampled_at"`
-	MonitorHealthy      bool           `json:"monitor_healthy"`
-	CraftyHealthy       bool           `json:"crafty_healthy"`
-	TimeSyncHealthy     bool           `json:"time_sync_healthy"`
-	MaintenanceActive   bool           `json:"maintenance_active"`
-	Operation           string         `json:"operation,omitempty"`
-	MemAvailableBytes   int64          `json:"mem_available_bytes"`
-	SwapOutMiBPerMinute float64        `json:"swap_out_mib_per_minute"`
-	SwapOutSamples      int            `json:"swap_out_samples"`
-	CPUPercent5m        float64        `json:"cpu_percent_5m"`
-	CPUPercentCurrent   float64        `json:"cpu_percent_current"`
-	CPUWindowSamples    int            `json:"cpu_window_samples"`
-	SwapOutPages        uint64         `json:"swap_out_pages"`
-	Load1               float64        `json:"load_1"`
-	MemoryFullPSIAvg60  float64        `json:"memory_full_psi_avg60"`
-	IOFullPSIAvg60      float64        `json:"io_full_psi_avg60"`
-	RootStorage         StorageMetric  `json:"root_storage"`
-	ServerStorage       StorageMetric  `json:"server_storage"`
-	BackupStorage       StorageMetric  `json:"backup_storage"`
-	Servers             []ServerMetric `json:"servers"`
+	SchemaVersion       int               `json:"schema_version"`
+	SampledAt           time.Time         `json:"sampled_at"`
+	MonitorHealthy      bool              `json:"monitor_healthy"`
+	CraftyHealthy       bool              `json:"crafty_healthy"`
+	TimeSyncHealthy     bool              `json:"time_sync_healthy"`
+	MaintenanceActive   bool              `json:"maintenance_active"`
+	Operation           string            `json:"operation,omitempty"`
+	MemAvailableBytes   int64             `json:"mem_available_bytes"`
+	SwapOutMiBPerMinute float64           `json:"swap_out_mib_per_minute"`
+	SwapOutSamples      int               `json:"swap_out_samples"`
+	CPUPercent5m        float64           `json:"cpu_percent_5m"`
+	CPUPercentCurrent   float64           `json:"cpu_percent_current"`
+	CPUWindowSamples    int               `json:"cpu_window_samples"`
+	SwapOutPages        uint64            `json:"swap_out_pages"`
+	Load1               float64           `json:"load_1"`
+	MemoryFullPSIAvg60  float64           `json:"memory_full_psi_avg60"`
+	IOFullPSIAvg60      float64           `json:"io_full_psi_avg60"`
+	RootStorage         StorageMetric     `json:"root_storage"`
+	ServerStorage       StorageMetric     `json:"server_storage"`
+	BackupStorage       StorageMetric     `json:"backup_storage"`
+	Servers             []ServerMetric    `json:"servers"`
+	Issues              []CollectionIssue `json:"issues,omitempty"`
 }
 
 type AdmissionDecision struct {

@@ -19,88 +19,103 @@ import (
 	"github.com/vgbn2/minecraft/internal/model"
 )
 
-func Collect(ctx context.Context, cfg model.Config, client *crafty.Client, profiles []model.Profile, now time.Time) model.Snapshot {
-	snapshot := model.Snapshot{SchemaVersion: 1, SampledAt: now, MonitorHealthy: true}
+func Collect(ctx context.Context, cfg model.Config, client crafty.API, profiles []model.Profile, now time.Time) model.Snapshot {
+	snapshot := model.Snapshot{SchemaVersion: 2, SampledAt: now, MonitorHealthy: true}
+	degrade := func(code, component string) {
+		snapshot.MonitorHealthy = false
+		snapshot.Issues = append(snapshot.Issues, model.CollectionIssue{Code: code, Component: component})
+	}
 	if value, err := memAvailable(); err == nil {
 		snapshot.MemAvailableBytes = value
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("mem_available_unavailable", "host_memory")
 	}
 	if value, err := loadOne(); err == nil {
 		snapshot.Load1 = value
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("load_unavailable", "host_cpu")
 	}
 	if value, err := cpuPercent(ctx); err == nil {
 		snapshot.CPUPercentCurrent = value
 		snapshot.CPUPercent5m = value
 		snapshot.CPUWindowSamples = 1
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("cpu_unavailable", "host_cpu")
 	}
 	if value, err := swapOutPages(); err == nil {
 		snapshot.SwapOutPages = value
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("swap_unavailable", "host_memory")
 	}
 	if value, err := psiAvg60("/proc/pressure/memory"); err == nil {
 		snapshot.MemoryFullPSIAvg60 = value
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("memory_psi_unavailable", "host_memory")
 	}
 	if value, err := psiAvg60("/proc/pressure/io"); err == nil {
 		snapshot.IOFullPSIAvg60 = value
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("io_psi_unavailable", "host_io")
 	}
 	if value, err := storage(cfg.RootStorage.Path); err == nil {
 		snapshot.RootStorage = value
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("root_storage_unavailable", "storage")
 	}
 	if value, err := storage(cfg.ServerStorage.Path); err == nil {
 		snapshot.ServerStorage = value
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("server_storage_unavailable", "storage")
 	}
 	if value, err := storage(cfg.BackupStorage.Path); err == nil {
 		snapshot.BackupStorage = value
 	} else {
-		snapshot.MonitorHealthy = false
+		degrade("backup_storage_unavailable", "storage")
 	}
 	command := exec.CommandContext(ctx, "timedatectl", "show", "-p", "NTPSynchronized", "--value")
 	if output, err := command.Output(); err == nil {
 		snapshot.TimeSyncHealthy = strings.TrimSpace(string(output)) == "yes"
+	} else {
+		degrade("time_sync_unavailable", "host_clock")
 	}
 	servers, err := client.ListServers(ctx)
 	if err == nil {
 		snapshot.CraftyHealthy = true
 		byID := map[string]model.Profile{}
+		seen := map[string]bool{}
 		for _, profile := range profiles {
 			byID[profile.CraftyServerID] = profile
 		}
 		for _, server := range servers {
+			seen[server.ID] = true
 			profile, managed := byID[server.ID]
 			if !managed {
-				snapshot.MonitorHealthy = false
+				degrade("unprofiled_crafty_server", "crafty_inventory")
 				continue
 			}
 			if filepath.Clean(server.Path) != filepath.Clean(profile.ServerRoot) || !strings.Contains(server.ExecutionCommand, "mcctl gate exec") {
-				snapshot.MonitorHealthy = false
+				degrade("crafty_definition_drift", "crafty_inventory")
 				continue
 			}
 			marker := strings.Index(server.ExecutionCommand, " -- ")
 			if marker < 0 || gate.CheckRuntime(profile, strings.Fields(server.ExecutionCommand[marker+4:])) != nil {
-				snapshot.MonitorHealthy = false
+				degrade("runtime_artifact_drift", "server_runtime")
 				continue
 			}
 			stats, statsErr := client.ServerStats(ctx, server.ID)
 			if statsErr != nil {
-				snapshot.MonitorHealthy = false
+				degrade("crafty_stats_unavailable", "crafty_api")
 				continue
 			}
 			snapshot.Servers = append(snapshot.Servers, model.ServerMetric{ID: server.ID, ProfileID: profile.ID, Running: stats.Running, HeapMaxMB: profile.Resources.HeapMaxMB, UnexpectedExit: stats.Crashed, PlayerCount: stats.Online})
 		}
+		for _, profile := range profiles {
+			if !seen[profile.CraftyServerID] {
+				degrade("profile_server_missing", "crafty_inventory")
+			}
+		}
+	} else {
+		degrade("crafty_inventory_unavailable", "crafty_api")
 	}
 	return snapshot
 }

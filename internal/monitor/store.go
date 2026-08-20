@@ -14,6 +14,7 @@ import (
 
 	"github.com/vgbn2/minecraft/internal/admission"
 	"github.com/vgbn2/minecraft/internal/model"
+	"github.com/vgbn2/minecraft/internal/statefile"
 )
 
 type Store struct{ db *sql.DB }
@@ -64,6 +65,8 @@ func (store *Store) initialize(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS reservations(server_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, heap_mb INTEGER NOT NULL, pid INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS alerts(alert_key TEXT PRIMARY KEY, severity TEXT NOT NULL, active INTEGER NOT NULL, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, last_notified INTEGER NOT NULL, occurrences INTEGER NOT NULL, detail TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS alert_events(id INTEGER PRIMARY KEY AUTOINCREMENT, alert_key TEXT NOT NULL, transition TEXT NOT NULL, occurred_at INTEGER NOT NULL, detail TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS alert_hysteresis(alert_key TEXT PRIMARY KEY, present_streak INTEGER NOT NULL, clear_streak INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS alert_notification_attempts(alert_key TEXT PRIMARY KEY, last_attempted INTEGER NOT NULL)`,
 	} {
 		if _, err := store.db.ExecContext(ctx, statement); err != nil {
 			return fmt.Errorf("initialize monitor database: %w", err)
@@ -81,11 +84,20 @@ func (store *Store) RecordSnapshot(ctx context.Context, snapshot model.Snapshot)
 	if err != nil {
 		return fmt.Errorf("encode snapshot: %w", err)
 	}
-	_, err = store.db.ExecContext(ctx, "INSERT OR REPLACE INTO samples(sampled_at,snapshot_json) VALUES(?,?)", snapshot.SampledAt.Unix(), string(raw))
+	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("begin snapshot record: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "INSERT OR REPLACE INTO samples(sampled_at,snapshot_json) VALUES(?,?)", snapshot.SampledAt.Unix(), string(raw)); err != nil {
 		return fmt.Errorf("record snapshot: %w", err)
 	}
-	return nil
+	for _, seconds := range []int64{300, 86400} {
+		if err := updateRollup(ctx, tx, snapshot.SampledAt, seconds); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (store *Store) EnrichSnapshot(ctx context.Context, snapshot *model.Snapshot) error {
@@ -162,6 +174,21 @@ func (store *Store) Reservations(ctx context.Context, now time.Time) ([]admissio
 	return values, rows.Err()
 }
 
+func (store *Store) ReleaseReservation(ctx context.Context, serverID string, pid int) error {
+	result, err := store.db.ExecContext(ctx, "DELETE FROM reservations WHERE server_id=? AND pid=?", serverID, pid)
+	if err != nil {
+		return fmt.Errorf("release failed start reservation: %w", err)
+	}
+	removed, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("inspect released reservation: %w", err)
+	}
+	if removed != 1 {
+		return errors.New("matching start reservation is unavailable")
+	}
+	return nil
+}
+
 func (store *Store) Prune(ctx context.Context, now time.Time) error {
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -180,56 +207,11 @@ func (store *Store) Prune(ctx context.Context, now time.Time) error {
 	return tx.Commit()
 }
 
-func (store *Store) ReconcileAlerts(ctx context.Context, current []AlertRecord, now time.Time) error {
-	tx, err := store.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
+func (store *Store) Checkpoint(ctx context.Context) error {
+	if _, err := store.db.ExecContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+		return fmt.Errorf("checkpoint monitor WAL: %w", err)
 	}
-	defer tx.Rollback()
-	active := map[string]bool{}
-	rows, err := tx.QueryContext(ctx, "SELECT alert_key FROM alerts WHERE active=1")
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
-			rows.Close()
-			return err
-		}
-		active[key] = true
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	seen := map[string]bool{}
-	for _, finding := range current {
-		seen[finding.Key] = true
-		transition := "ongoing"
-		if !active[finding.Key] {
-			transition = "triggered"
-		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO alerts(alert_key,severity,active,first_seen,last_seen,last_notified,occurrences,detail) VALUES(?,?,1,?,?,0,1,?) ON CONFLICT(alert_key) DO UPDATE SET severity=excluded.severity,active=1,last_seen=excluded.last_seen,occurrences=alerts.occurrences+1,detail=excluded.detail`, finding.Key, finding.Severity, now.Unix(), now.Unix(), finding.Detail)
-		if err != nil {
-			return err
-		}
-		if transition == "triggered" {
-			if _, err := tx.ExecContext(ctx, "INSERT INTO alert_events(alert_key,transition,occurred_at,detail) VALUES(?,?,?,?)", finding.Key, transition, now.Unix(), finding.Detail); err != nil {
-				return err
-			}
-		}
-	}
-	for key := range active {
-		if !seen[key] {
-			if _, err := tx.ExecContext(ctx, "UPDATE alerts SET active=0,last_seen=? WHERE alert_key=?", now.Unix(), key); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx, "INSERT INTO alert_events(alert_key,transition,occurred_at,detail) VALUES(?,?,?,?)", key, "recovered", now.Unix(), "condition recovered"); err != nil {
-				return err
-			}
-		}
-	}
-	return tx.Commit()
+	return nil
 }
 
 func (store *Store) Alerts(ctx context.Context) ([]AlertRecord, []AlertEvent, error) {
@@ -263,38 +245,7 @@ func (store *Store) Alerts(ctx context.Context) ([]AlertRecord, []AlertEvent, er
 }
 
 func WriteSnapshotAtomic(path string, snapshot model.Snapshot) error {
-	raw, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode current snapshot: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".snapshot-*")
-	if err != nil {
-		return fmt.Errorf("create temporary snapshot: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o640); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(append(raw, '\n')); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return fmt.Errorf("promote current snapshot: %w", err)
-	}
-	return nil
+	return statefile.WriteJSONAtomic(path, snapshot)
 }
 
 func Quarantine(databasePath, snapshotPath string, now time.Time) ([]string, error) {

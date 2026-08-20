@@ -29,7 +29,7 @@ func LoadSnapshot(path string) (model.Snapshot, error) {
 	if err := decoder.Decode(&snapshot); err != nil {
 		return snapshot, fmt.Errorf("decode monitor snapshot: %w", err)
 	}
-	if snapshot.SchemaVersion != 1 {
+	if snapshot.SchemaVersion != 1 && snapshot.SchemaVersion != 2 {
 		return snapshot, fmt.Errorf("unsupported snapshot schema_version %d", snapshot.SchemaVersion)
 	}
 	return snapshot, nil

@@ -45,3 +45,23 @@ func TestClientUsesPinnedV2PathsAndBearerToken(t *testing.T) {
 		t.Fatal("kill action passed")
 	}
 }
+
+func TestClientDoesNotExposeErrorResponseBody(t *testing.T) {
+	token := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(token, []byte("secret-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `token=secret-token path=/private/server player=alice`)
+	}))
+	defer server.Close()
+	client, err := New(model.CraftyConfig{BaseURL: server.URL, TokenFile: token, AllowInsecureLocal: true, RequestTimeoutSecs: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.ListServers(context.Background())
+	if err == nil || err.Error() != "Crafty returned HTTP 401" {
+		t.Fatalf("unexpected sanitized error %q", err)
+	}
+}

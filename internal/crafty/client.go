@@ -48,6 +48,19 @@ type Client struct {
 	http      *http.Client
 }
 
+type API interface {
+	ListServers(context.Context) ([]Server, error)
+	ServerStats(context.Context, string) (Stats, error)
+}
+
+type HTTPError struct {
+	StatusCode int
+}
+
+func (value HTTPError) Error() string {
+	return fmt.Sprintf("Crafty returned HTTP %d", value.StatusCode)
+}
+
 func New(cfg model.CraftyConfig) (*Client, error) {
 	parsed, err := url.Parse(cfg.BaseURL)
 	if err != nil {
@@ -110,8 +123,8 @@ func (client *Client) request(ctx context.Context, method, path string, body io.
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		limited, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("Crafty returned HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(limited)))
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		return HTTPError{StatusCode: response.StatusCode}
 	}
 	if output == nil {
 		return nil

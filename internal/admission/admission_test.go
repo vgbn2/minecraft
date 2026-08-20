@@ -1,7 +1,10 @@
 package admission
 
 import (
+	"encoding/json"
 	"github.com/vgbn2/minecraft/internal/model"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -46,5 +49,22 @@ func TestOldSwapWithoutSwapOutDoesNotReject(t *testing.T) {
 	decision := Evaluate(snapshot.SampledAt, cfg, profile, snapshot, nil)
 	if !decision.Allowed {
 		t.Fatalf("inactive swap rejected: %+v", decision)
+	}
+}
+
+func TestLoadSnapshotReadsV1AndV2(t *testing.T) {
+	for _, version := range []int{1, 2} {
+		path := filepath.Join(t.TempDir(), "snapshot.json")
+		raw, err := json.Marshal(model.Snapshot{SchemaVersion: version, Issues: []model.CollectionIssue{{Code: "fixture", Component: "test"}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := LoadSnapshot(path)
+		if err != nil || got.SchemaVersion != version {
+			t.Fatalf("version=%d got=%+v err=%v", version, got, err)
+		}
 	}
 }

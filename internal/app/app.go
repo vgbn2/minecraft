@@ -11,21 +11,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"golang.org/x/sys/unix"
-
-	"github.com/vgbn2/minecraft/internal/admission"
-	"github.com/vgbn2/minecraft/internal/alerts"
 	"github.com/vgbn2/minecraft/internal/atlas"
-	"github.com/vgbn2/minecraft/internal/audit"
 	controlconfig "github.com/vgbn2/minecraft/internal/config"
 	"github.com/vgbn2/minecraft/internal/crafty"
-	"github.com/vgbn2/minecraft/internal/gate"
-	operationlock "github.com/vgbn2/minecraft/internal/lock"
 	"github.com/vgbn2/minecraft/internal/model"
-	"github.com/vgbn2/minecraft/internal/monitor"
 	"github.com/vgbn2/minecraft/internal/profile"
+	"github.com/vgbn2/minecraft/internal/statefile"
 )
 
 const Version = "0.2.0-crafty"
@@ -91,7 +83,7 @@ func dispatch(ctx context.Context, args []string, stderr io.Writer) (response, e
 	case "health":
 		return healthCommand(args[1:], stderr)
 	case "alerts":
-		return alertsCommand(args[1:], stderr)
+		return alertsCommand(ctx, args[1:], stderr)
 	case "audit":
 		return auditCommand(ctx, args[1:], stderr)
 	case "gate":
@@ -171,273 +163,6 @@ func doctorCommand(args []string, stderr io.Writer) (response, error) {
 		return response{}, errors.New("Crafty token file must not be group/world accessible")
 	}
 	return response{command: "doctor", data: tools, warnings: []string{"doctor does not start Crafty or a Minecraft server"}, human: "local prerequisites and token permissions are valid\n"}, nil
-}
-
-func craftyCommand(ctx context.Context, args []string, stderr io.Writer) (response, error) {
-	if len(args) == 0 {
-		return response{}, errors.New("supported Crafty commands: servers, stats, action, contract-verify")
-	}
-	flags := newFlagSet("crafty "+args[0], stderr)
-	configPath := flags.String("config", "", "configuration JSON path")
-	serverID := flags.String("server", "", "Crafty server UUID")
-	action := flags.String("action", "", "approved Crafty action")
-	contractPath := flags.String("file", "", "downloaded Crafty OpenAPI YAML")
-	if err := flags.Parse(args[1:]); err != nil {
-		return response{}, err
-	}
-	cfg, client, err := loadClient(*configPath)
-	if err != nil {
-		return response{}, err
-	}
-	_ = cfg
-	switch args[0] {
-	case "contract-verify":
-		if *contractPath == "" {
-			return response{}, errors.New("--file is required")
-		}
-		if err := crafty.VerifyOpenAPI(*contractPath, cfg.Crafty); err != nil {
-			return response{}, err
-		}
-		return response{command: "crafty contract-verify", data: map[string]string{"file": *contractPath, "sha256": cfg.Crafty.OpenAPISHA256}, human: "Crafty OpenAPI contract matches the configured pin\n"}, nil
-	case "servers":
-		servers, err := client.ListServers(ctx)
-		if err != nil {
-			return response{}, err
-		}
-		return response{command: "crafty servers", data: servers, human: fmt.Sprintf("%d Crafty servers visible\n", len(servers))}, nil
-	case "stats":
-		if *serverID == "" {
-			return response{}, errors.New("--server is required")
-		}
-		stats, err := client.ServerStats(ctx, *serverID)
-		if err != nil {
-			return response{}, err
-		}
-		return response{command: "crafty stats", data: stats, human: fmt.Sprintf("server %s running=%t players=%d\n", *serverID, stats.Running, stats.Online)}, nil
-	case "action":
-		if *serverID == "" || *action == "" {
-			return response{}, errors.New("--server and --action are required")
-		}
-		if err := client.Action(ctx, *serverID, *action); err != nil {
-			return response{}, err
-		}
-		return response{command: "crafty action", data: map[string]string{"server": *serverID, "action": *action}, human: "Crafty action accepted\n"}, nil
-	default:
-		return response{}, errors.New("supported Crafty commands: servers, stats, action, contract-verify")
-	}
-}
-
-func monitorCommand(ctx context.Context, args []string, stderr io.Writer) (response, error) {
-	if len(args) == 0 || (args[0] != "sample" && args[0] != "recover") {
-		return response{}, errors.New("supported monitor commands: sample, recover")
-	}
-	flags := newFlagSet("monitor sample", stderr)
-	configPath := flags.String("config", "", "configuration JSON path")
-	confirmation := flags.String("confirm", "", "required recovery confirmation")
-	if err := flags.Parse(args[1:]); err != nil {
-		return response{}, err
-	}
-	cfg, client, err := loadClient(*configPath)
-	if err != nil {
-		return response{}, err
-	}
-	if args[0] == "recover" {
-		if *confirmation != "quarantine-corrupt-monitor" {
-			return response{}, errors.New("monitor recovery requires --confirm quarantine-corrupt-monitor")
-		}
-		guard, lockErr := operationlock.Acquire(cfg.OperationLockPath, true)
-		if lockErr != nil {
-			return response{}, errors.New("operation_in_progress")
-		}
-		defer guard.Close()
-		moved, recoverErr := monitor.Quarantine(cfg.MonitorDBPath, cfg.SnapshotPath, time.Now().UTC())
-		if recoverErr != nil {
-			return response{}, recoverErr
-		}
-		return response{command: "monitor recover", data: moved, human: fmt.Sprintf("quarantined %d monitor state files; starts remain blocked until a fresh sample exists\n", len(moved))}, nil
-	}
-	profiles, err := loadProfiles(cfg.ProfileDir)
-	if err != nil {
-		return response{}, err
-	}
-	store, err := monitor.Open(cfg.MonitorDBPath)
-	if err != nil {
-		return response{}, err
-	}
-	defer store.Close()
-	snapshot := monitor.Collect(ctx, cfg, client, profiles, time.Now().UTC())
-	if err := store.EnrichSnapshot(ctx, &snapshot); err != nil {
-		return response{}, err
-	}
-	findings := alerts.Evaluate(snapshot)
-	records := make([]monitor.AlertRecord, 0, len(findings))
-	for _, finding := range findings {
-		records = append(records, monitor.AlertRecord{Key: finding.Key, Severity: finding.Severity, Detail: finding.Detail})
-	}
-	if err := store.ReconcileAlerts(ctx, records, snapshot.SampledAt); err != nil {
-		return response{}, err
-	}
-	if err := writeJSONAtomic(filepath.Join(cfg.StateDir, "current-alerts.json"), map[string]any{"at": snapshot.SampledAt, "findings": findings}); err != nil {
-		return response{}, err
-	}
-	if err := store.RecordSnapshot(ctx, snapshot); err != nil {
-		return response{}, err
-	}
-	if err := store.Prune(ctx, time.Now().UTC()); err != nil {
-		return response{}, err
-	}
-	if err := monitor.WriteSnapshotAtomic(cfg.SnapshotPath, snapshot); err != nil {
-		return response{}, err
-	}
-	return response{command: "monitor sample", data: snapshot, human: fmt.Sprintf("monitor sample recorded at %s\n", snapshot.SampledAt.Format(time.RFC3339))}, nil
-}
-
-func healthCommand(args []string, stderr io.Writer) (response, error) {
-	flags := newFlagSet("health", stderr)
-	configPath := flags.String("config", "", "configuration JSON path")
-	if err := flags.Parse(args); err != nil {
-		return response{}, err
-	}
-	cfg, err := controlconfig.Load(*configPath)
-	if err != nil {
-		return response{}, err
-	}
-	snapshot, err := admission.LoadSnapshot(cfg.SnapshotPath)
-	if err != nil {
-		return response{}, err
-	}
-	findings := alerts.Evaluate(snapshot)
-	var lastRejection any
-	if raw, readErr := os.ReadFile(filepath.Join(cfg.StateDir, "last-rejection.json")); readErr == nil {
-		_ = json.Unmarshal(raw, &lastRejection)
-	}
-	return response{command: "health", data: map[string]any{"snapshot": snapshot, "findings": findings, "last_rejection": lastRejection}, human: fmt.Sprintf("monitor sampled %s; %d active findings\n", snapshot.SampledAt.Format(time.RFC3339), len(findings))}, nil
-}
-func alertsCommand(args []string, stderr io.Writer) (response, error) {
-	flags := newFlagSet("alerts", stderr)
-	configPath := flags.String("config", "", "configuration JSON path")
-	if err := flags.Parse(args); err != nil {
-		return response{}, err
-	}
-	cfg, err := controlconfig.Load(*configPath)
-	if err != nil {
-		return response{}, err
-	}
-	store, err := monitor.Open(cfg.MonitorDBPath)
-	if err != nil {
-		return response{}, err
-	}
-	defer store.Close()
-	records, events, err := store.Alerts(context.Background())
-	if err != nil {
-		return response{}, err
-	}
-	return response{command: "alerts", data: map[string]any{"alerts": records, "events": events}, human: fmt.Sprintf("%d alert records; %d recent transitions\n", len(records), len(events))}, nil
-}
-
-func auditCommand(ctx context.Context, args []string, stderr io.Writer) (response, error) {
-	flags := newFlagSet("audit", stderr)
-	configPath := flags.String("config", "", "configuration JSON path")
-	if err := flags.Parse(args); err != nil {
-		return response{}, err
-	}
-	cfg, client, err := loadClient(*configPath)
-	if err != nil {
-		return response{}, err
-	}
-	profiles, err := loadProfiles(cfg.ProfileDir)
-	if err != nil {
-		return response{}, err
-	}
-	servers, err := client.ListServers(ctx)
-	if err != nil {
-		return response{}, err
-	}
-	findings := audit.Ownership(servers, profiles, cfg.ServerRoot)
-	return response{command: "audit", data: findings, human: fmt.Sprintf("ownership audit completed with %d findings\n", len(findings))}, nil
-}
-
-func gateCommand(ctx context.Context, args []string, stderr io.Writer) (response, error) {
-	if len(args) == 0 || (args[0] != "check" && args[0] != "exec") {
-		return response{}, errors.New("supported gate commands: check, exec")
-	}
-	action := args[0]
-	flags := newFlagSet("gate "+action, stderr)
-	configPath := flags.String("config", "", "configuration JSON path")
-	profilePath := flags.String("profile", "", "approved profile JSON path")
-	if err := flags.Parse(args[1:]); err != nil {
-		return response{}, err
-	}
-	if *configPath == "" || *profilePath == "" {
-		return response{}, errors.New("--config and --profile are required")
-	}
-	cfg, err := controlconfig.Load(*configPath)
-	if err != nil {
-		return response{}, err
-	}
-	approved, _, err := profile.Load(*profilePath)
-	if err != nil {
-		return response{}, err
-	}
-	relativeRoot, relErr := filepath.Rel(filepath.Clean(cfg.ServerRoot), filepath.Clean(approved.ServerRoot))
-	if relErr != nil || relativeRoot == "." || relativeRoot == ".." || strings.HasPrefix(relativeRoot, ".."+string(filepath.Separator)) {
-		return response{}, errors.New("profile server_root is outside configured server root")
-	}
-	guard, err := operationlock.Acquire(cfg.OperationLockPath, true)
-	if err != nil {
-		return response{}, errors.New("operation_in_progress")
-	}
-	defer guard.Close()
-	store, err := monitor.Open(cfg.MonitorDBPath)
-	if err != nil {
-		return response{}, err
-	}
-	defer store.Close()
-	now := time.Now().UTC()
-	reservations, err := store.Reservations(ctx, now)
-	if err != nil {
-		return response{}, err
-	}
-	snapshot, err := admission.LoadSnapshot(cfg.SnapshotPath)
-	if err != nil {
-		return response{}, err
-	}
-	decision := admission.Evaluate(now, cfg, approved, snapshot, reservations)
-	if action == "check" {
-		if !decision.Allowed {
-			_ = writeJSONAtomic(filepath.Join(cfg.StateDir, "last-rejection.json"), map[string]any{"at": now, "decision": decision})
-			return response{}, fmt.Errorf("start rejected: %s", strings.Join(decision.Reasons, ","))
-		}
-		return response{command: "gate check", data: decision, human: "start admission allowed\n"}, nil
-	}
-	command := flags.Args()
-	if os.Geteuid() != cfg.CraftyServiceUID {
-		return response{}, errors.New("gate exec must run as the configured Crafty service UID")
-	}
-	if !decision.Allowed {
-		_ = writeJSONAtomic(filepath.Join(cfg.StateDir, "last-rejection.json"), map[string]any{"at": now, "decision": decision})
-		return response{}, fmt.Errorf("start rejected: %s", strings.Join(decision.Reasons, ","))
-	}
-	if err := gate.CheckRuntime(approved, command); err != nil {
-		return response{}, err
-	}
-	if err := store.Reserve(ctx, approved.CraftyServerID, approved.ID, approved.Resources.HeapMaxMB, os.Getpid(), now, time.Duration(cfg.ReservationTTLSecs)*time.Second); err != nil {
-		return response{}, err
-	}
-	if err := guard.Close(); err != nil {
-		return response{}, err
-	}
-	if err := store.Close(); err != nil {
-		return response{}, err
-	}
-	path, err := exec.LookPath(command[0])
-	if err != nil {
-		return response{}, err
-	}
-	if err := unix.Exec(path, command, os.Environ()); err != nil {
-		return response{}, fmt.Errorf("exec Java: %w", err)
-	}
-	return response{}, errors.New("unreachable after exec")
 }
 
 func atlasCommand(ctx context.Context, args []string, stderr io.Writer) (response, error) {
@@ -531,35 +256,7 @@ func emitJSON(writer io.Writer, value envelope) {
 }
 
 func writeJSONAtomic(path string, value any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
-	raw, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".mcctl-*")
-	if err != nil {
-		return err
-	}
-	name := temporary.Name()
-	defer os.Remove(name)
-	if err := temporary.Chmod(0o640); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(append(raw, '\n')); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, path)
+	return statefile.WriteJSONAtomic(path, value)
 }
 func helpText() string {
 	return `mcctl - Crafty client, admission controller, monitor, and audit CLI
