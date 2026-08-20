@@ -6,6 +6,7 @@
 - Paper is currently pinned in `Dockerfile`; upgrades require release-note review and copied-world validation.
 - World/player/runtime data and local secrets are not Git-managed and need an independent backup and recovery process.
 - The local generated `server.properties` has historically used `online-mode=false`; the committed example defaults to the safer `online-mode=true`.
+- The canonical Git remote is the private repository `git@github.com:vgbn2/minecraft.git`, branch `main`.
 
 ## Evidence boundaries
 

@@ -1,6 +1,6 @@
 # Project State
 
-Status: locally initialized; remote publication pending
+Status: initialized and published to private GitHub repository
 
 ## Tracked scope
 
