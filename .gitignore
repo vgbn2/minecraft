@@ -1,0 +1,38 @@
+# Local secrets and machine-specific settings
+.env
+.env.*
+!.env.example
+server.properties
+
+# Paper/Minecraft runtime state
+banned-ips.json
+banned-players.json
+eula.txt
+logs/
+crash-reports/
+ops.json
+usercache.json
+version_history.json
+whitelist.json
+world/
+world_nether/
+world_the_end/
+data/
+
+# Downloaded server binaries and generated dependencies
+cache/
+libraries/
+server.jar
+versions/
+
+# Plugin binaries and generated caches
+plugins/**/*.jar
+plugins/.paper-remapped/
+plugins/bStats/
+plugins/spark/tmp/
+
+# Local editor and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp

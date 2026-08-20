@@ -1,0 +1,15 @@
+services:
+  minecraft:
+    build:
+      context: .
+    container_name: minecraft
+    restart: unless-stopped
+    ports:
+      - "25565:25565"
+    volumes:
+      - ./data:/opt/minecraft/world
+      - ./plugins:/opt/minecraft/plugins
+      - ./config:/opt/minecraft/config
+      - ./server.properties:/opt/minecraft/server.properties
+    mem_limit: 5g
+    stdin_open: true
