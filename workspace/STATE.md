@@ -1,6 +1,6 @@
 # Project State
 
-Status: initial repository bootstrap
+Status: locally initialized; remote publication pending
 
 ## Tracked scope
 
