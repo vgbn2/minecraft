@@ -1,6 +1,6 @@
 # Project State
 
-Status: first Crafty control-plane beta committed and pushed; qualification next; world adoption remains NO-GO
+Status: Crafty control-plane beta qualification committed and pushed; world adoption remains NO-GO
 
 ## Tracked scope
 
@@ -22,6 +22,8 @@ Status: first Crafty control-plane beta committed and pushed; qualification next
 No deployment, recovery, backup restore, or live-server qualification has been completed by this repository bootstrap.
 
 The current `mcctl` surface is a Crafty v2 client, immutable-profile validator, fail-closed `gate exec` wrapper, Linux/Crafty sampler, WAL monitoring/alert store, ownership audit, and Code Atlas checker. Crafty is the sole server catalog/lifecycle owner. The obsolete tenant catalog, Compose renderer, and lifecycle state machine were removed.
+
+The qualification source at `96dd06a56de312dc57de083acaba26398cd0f093` adds a testable startgate owner, matching-PID failed-exec cleanup, snapshot v2 redacted issue codes with v1 readers, metric rollups/checkpointing, structured redacted diagnostics, durable alert hysteresis/deduplication/reminder-attempt state, notifier mocks, and bounded disposable load evidence. It is pushed to `origin/main`; it is not deployment or runtime qualification.
 
 ## Open operational blocker
 
