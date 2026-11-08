@@ -1,0 +1,38 @@
+name: Feature Proposal
+description: Propose a new causal game skill, architectural enhancement, or infrastructure feature.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Underlying Problem or Goal
+      description: Describe what physical game dynamic, agent capability, or infrastructure requirement needs enhancement.
+    validations:
+      required: true
+  - type: textarea
+    id: causal_mechanic
+    attributes:
+      label: Causal Game Mechanics & Invariants
+      description: Which underlying game engine rules govern this feature (e.g. mob aggro distance, redstone tick delay, voxel attachment rules)?
+    validations:
+      required: true
+  - type: dropdown
+    id: polyglot_target
+    attributes:
+      label: Target Subsystem
+      options:
+        - "Rust Core (mc_path_core)"
+        - "Go Control Plane (mcctl)"
+        - "Node.js Bot Squad (bots/)"
+        - "Server Infrastructure & Hardening"
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Implementation
+      description: How should this be implemented with minimal complexity and zero bloat?
+    validations:
+      required: true

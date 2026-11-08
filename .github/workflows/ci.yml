@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-          cache-dependency-path: bots/package.json
+          cache-dependency-path: bots/package-lock.json
 
       - name: Install Bot Dependencies
         working-directory: bots
@@ -82,10 +82,11 @@ jobs:
 
       - name: Validate TOML / YAML Server Configs
         run: |
+          pip install --no-cache-dir pyyaml
           python3 -c "
           import tomllib, yaml, glob, sys
           print('[*] Checking YAML & TOML files...')
-          for y in glob.glob('config/**/*.yml', recursive=True) + glob.glob('*.yml') + glob.glob('*.yaml'):
+          for y in glob.glob('config/**/*.yml', recursive=True) + glob.glob('config/**/*.yaml', recursive=True) + glob.glob('*.yml') + glob.glob('*.yaml'):
               with open(y, 'r') as f:
                   yaml.safe_load(f)
           print('[+] All server configurations parsed cleanly.')

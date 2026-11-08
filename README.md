@@ -7,7 +7,7 @@
 ![Go Version](https://img.shields.io/badge/Go-1.22%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-purple)
 
-This repository provides an institutional, polyglot Minecraft infrastructure stack combining a **Rust-based high-throughput game core**, a **Go fail-closed control plane (`mcctl`)**, and a **5-agent autonomous survival bot squad** driven by local LAN AI (`9Router`) and physical game invariants.
+This repository provides an institutional, polyglot Minecraft infrastructure stack combining a **Rust-based high-throughput game core**, a **Go fail-closed control plane (`mcctl`)**, and an **autonomous survival bot squad** driven by local LAN AI (`9Router`) and physical game invariants.
 
 ---
 
@@ -21,9 +21,9 @@ This repository provides an institutional, polyglot Minecraft infrastructure sta
 │   │        RUST CORE          │ │        GO CONTROL         │ │     NODE.JS SQUAD    │ │
 │   │ (High-Throughput Physics) │ │(Infrastructure Supervisor)│ │ (Tactical Intelligence)│ │
 │   ├───────────────────────────┤ ├───────────────────────────┤ ├──────────────────────┤ │
-│   │ • Pumpkin Rust Server     │ │ • mcctl Daemon & CLI      │ │ • Mastermind Jotaro  │ │
+│   │ • Pumpkin Rust Server     │ │ • mcctl Daemon & CLI      │ │ • Task Orchestrator  │ │
 │   │   (Microsecond TPS Loop)  │ │ • Fail-Closed Admission   │ │ • 9Router AI Adapter │ │
-│   │ • mc_path_core Engine     │ │ • SQLite WAL Telemetry    │ │ • 5 Autonomous Bots  │ │
+│   │ • mc_path_core Engine     │ │ • SQLite WAL Telemetry    │ │ • Autonomous Bots    │ │
 │   │   (SIMD A* 3D Pathfinder) │ │ • Crafty API Integration  │ │ • Dynamic Behavior   │ │
 │   │ • Zero-GC Chunk Processor │ │ • Systemd & Backup Hooks  │ │   State Machines     │ │
 │   └─────────────┬─────────────┘ └─────────────┬─────────────┘ └──────────┬───────────┘ │
@@ -44,21 +44,7 @@ This repository provides an institutional, polyglot Minecraft infrastructure sta
 
 ---
 
-## 2. Autonomous Agent Squad Matrix
-
-The bot squad operates as a coordinated survival team using 6-axis stat vectors (**P/S/R/D/P/P**: Power, Speed, Range, Durability, Precision, Potential) to specialize competencies without supernatural gimmicks:
-
-| Agent Name | Archetype | Primary Role | Stats (P/S/R/D/P/P) | Causal Specialization & Behavioral Invariant |
-| :--- | :--- | :--- | :--- | :--- |
-| **Jotaro** | **Commander** | Mastermind / Orchestration | `A / A / C / A / A / A` | Strategic task decomposition via local LAN AI (9Router); broadcasts milestones in public chat; coordinates group sleep. |
-| **Bob** | **Architect** | Precision Voxel Assembly | `A / A / D / B / A / C` | Topological bottom-up construction; resolves reference block faces; builds 20x20 manors with zero floating blocks. |
-| **Torin** | **Excavator** | Mining & Tool Progression | `B / A / C / B / A / C` | Tool tier matching (wooden $\to$ stone $\to$ iron); deep quarrying; carries bed into mines for squad sleep synchronization. |
-| **Arthur** | **Sentinel** | Perimeter Security & Guard | `A / B / B / A / B / B` | 3.5m–4.0m golden spacing combat kinematics; anti-creeper fuse clearance; perimeter torch grid defense. |
-| **Willow** | **Harvester** | Agrarian Food Chain & Scout| `C / A / A / C / A / B` | 9x9 Chebyshev hydrated farming ($L_\infty \le 4$); mature crop harvesting; bread crafting; squad nutrition distribution. |
-
----
-
-## 3. Causal Element Architecture
+## 2. Causal Element Architecture
 
 Instead of designing software around transient human symptoms ("bots are hungry", "need to clear land"), the codebase is strictly structured around the **underlying game engine mechanics that govern behavior**:
 
@@ -70,7 +56,7 @@ Instead of designing software around transient human symptoms ("bots are hungry"
 
 ---
 
-## 4. Operational CLI Runbook
+## 3. Operational CLI Runbook
 
 ### 1. Inspection & Diagnostic Probes (Read-Only)
 ```bash
@@ -110,7 +96,7 @@ cd bots && node test-verify.mjs # runs core kinematics, AI proxy, & supervisor c
 
 ---
 
-## 5. Security & Server Hardening
+## 4. Security & Server Hardening
 
 * **Loopback-Only Ingress**: Server ports (`25565` Paper, `25566` Pumpkin) bind strictly to `127.0.0.1`.
 * **Zero WAN Exposure**: Remote connections are routed exclusively via encrypted Tailscale mesh routes or SSH tunnels.

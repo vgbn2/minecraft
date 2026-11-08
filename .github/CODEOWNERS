@@ -1,0 +1,11 @@
+# Global repo owner
+* @vgbn2
+
+# Autonomous Bot System
+/bots/ @vgbn2
+
+# CI/CD & Security Workflows
+/.github/ @vgbn2
+
+# Documentation & Architecture
+/docs/ @vgbn2

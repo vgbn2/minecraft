@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible, non-sensitive defect.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not report security vulnerabilities, credentials, private IP addresses, or secrets here.**
+        See [SECURITY.md](../SECURITY.md) for confidential security reporting instructions.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the observed behavior vs expected physical game behavior.
+    validations:
+      required: true
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Affected Subsystem
+      options:
+        - "bots/skills (causal mechanics, hydration, container, voxels)"
+        - "bots/kinematics (A* pathfinding, combat evasion, escape)"
+        - "mc_path_core (Rust SIMD pathfinder)"
+        - "mcctl (Go control plane & admission gate)"
+        - "Server Configs (Paper, Pumpkin, Spigot)"
+        - "CI/CD & Tools"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Safe reproduction
+      description: Provide minimal steps, bot commands, or inputs to trigger the defect.
+      placeholder: |
+        1. Run `node test-verify.mjs` or join server with bot archetype...
+        2. Execute command...
+        3. Observe error...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence & Logs
+      description: Include relevant console logs (with any IPs/tokens redacted) and test outcomes.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety declaration
+      options:
+        - label: This report contains no private keys, passwords, unmasked API keys, or confidential tokens.
+          required: true
+        - label: This report does not disclose an unpatched vulnerability in server networking or admission.
+          required: true

@@ -66,3 +66,7 @@ target/
 worlds/
 .claude/
 
+# Ephemeral workspace notes and agent session state
+workspace/
+workspace
+
