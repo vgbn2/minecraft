@@ -12,7 +12,7 @@ import (
 )
 
 func TestPinnedRequiredContract(t *testing.T) {
-	raw, err := os.ReadFile("../../contracts/crafty-v2-required.json")
+	raw, err := os.ReadFile("testdata/crafty-v2-required.json")
 	if err != nil {
 		t.Fatal(err)
 	}
