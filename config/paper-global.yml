@@ -39,12 +39,12 @@ chunk-loading-advanced:
   player-max-concurrent-chunk-generates: 0
   player-max-concurrent-chunk-loads: 0
 chunk-loading-basic:
-  player-max-chunk-generate-rate: -1.0
-  player-max-chunk-load-rate: 100.0
-  player-max-chunk-send-rate: 75.0
+  player-max-chunk-generate-rate: 3.0
+  player-max-chunk-load-rate: -1.0
+  player-max-chunk-send-rate: -1.0
 chunk-system:
-  io-threads: -1
-  worker-threads: -1
+  io-threads: 1
+  worker-threads: 1
 collisions:
   enable-player-collisions: true
   send-full-pos-for-hard-colliding-entities: true
@@ -97,9 +97,9 @@ misc:
   xp-orb-groups-per-area: default
 packet-limiter:
   all-packets:
-    action: KICK
+    action: DROP
     interval: 7.0
-    max-packet-rate: 500.0
+    max-packet-rate: 2000.0
   kick-message: <red><lang:disconnect.exceeded_packet_rate>
   overrides:
     minecraft:place_recipe:
@@ -121,7 +121,7 @@ scoreboards:
   save-empty-scoreboard-teams: true
   track-plugin-scoreboards: false
 spam-limiter:
-  incoming-packet-threshold: 300
+  incoming-packet-threshold: 2000
   recipe-spam-increment: 1
   recipe-spam-limit: 20
   tab-spam-increment: 1

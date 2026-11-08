@@ -6,10 +6,39 @@ services:
     restart: unless-stopped
     ports:
       - "25565:25565"
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Xms4000M -Xmx4500M
+        -XX:+UseG1GC
+        -XX:+ParallelRefProcEnabled
+        -XX:MaxGCPauseMillis=200
+        -XX:+UnlockExperimentalVMOptions
+        -XX:+DisableExplicitGC
+        -XX:+AlwaysPreTouch
+        -XX:G1NewSizePercent=30
+        -XX:G1MaxNewSizePercent=40
+        -XX:G1ReservePercent=20
+        -XX:G1HeapWastePercent=5
+        -XX:G1MixedGCCountTarget=4
+        -XX:InitiatingHeapOccupancyPercent=15
+        -XX:G1MixedGCLiveThresholdPercent=90
+        -XX:G1RSetUpdatingPauseTimePercent=5
+        -XX:SurvivorRatio=32
+        -XX:+PerfDisableSharedMem
+        -XX:MaxTenuringThreshold=1
+        -XX:+CrashOnOutOfMemoryError
+        -Dusing.aikars.flags=https://mcflags.emc.gs
+        -Daikars.new.flags=true
     volumes:
       - ./data:/opt/minecraft/world
       - ./plugins:/opt/minecraft/plugins
       - ./config:/opt/minecraft/config
       - ./server.properties:/opt/minecraft/server.properties
-    mem_limit: 5g
+    mem_limit: 6g
     stdin_open: true
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '(echo > /dev/tcp/127.0.0.1/25565)' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

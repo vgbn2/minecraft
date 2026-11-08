@@ -1,6 +1,6 @@
 # Project State
 
-Status: Crafty beta committed; product and code direction awaiting documentation-only reassessment; world adoption remains NO-GO
+Status: Documentation & Simple Web Product Reassessment completed; magic number inventory and custom code rationalization defined; world adoption remains NO-GO
 
 ## Tracked scope
 
@@ -10,6 +10,7 @@ Status: Crafty beta committed; product and code direction awaiting documentation
 - Pinned Crafty OpenAPI required-operation contract and Paper/Fabric profiles
 - Tracked agent Code Atlas with deterministic inventory checking
 - Crafty API client, profile/runtime verification, admission gate, monitor/alerts, corruption recovery, and ownership audit
+- Simple Web Product Reassessment document (`workspace/plans/SIMPLE_WEB_PRODUCT_REASSESSMENT.md`)
 - Reviewed native Crafty/monitor systemd templates; not deployed
 
 ## Untracked operational scope
@@ -21,13 +22,21 @@ Status: Crafty beta committed; product and code direction awaiting documentation
 
 No deployment, recovery, backup restore, or live-server qualification has been completed by this repository bootstrap.
 
-The current `mcctl` surface is a Crafty v2 client, immutable-profile validator, fail-closed `gate exec` wrapper, Linux/Crafty sampler, WAL monitoring/alert store, ownership audit, and Code Atlas checker. Crafty is the sole server catalog/lifecycle owner. The obsolete tenant catalog, Compose renderer, and lifecycle state machine were removed.
+## Fleet Topology & Isolation
 
-The qualification source at `96dd06a56de312dc57de083acaba26398cd0f093` adds a testable startgate owner, matching-PID failed-exec cleanup, snapshot v2 redacted issue codes with v1 readers, metric rollups/checkpointing, structured redacted diagnostics, durable alert hysteresis/deduplication/reminder-attempt state, notifier mocks, and bounded disposable load evidence. It is pushed to `origin/main`; it is not deployment or runtime qualification.
+- **HP Desk (`100.122.7.7` via Tailscale)**: Primary production host (higher RAM/compute). Runs native Crafty 4.10.8 under an unprivileged `crafty` service account. Management source mirrored at `/home/vgbn-server/Documents/codeptit/minecraft/releases/<commit>/`, isolated from the runtime `/opt/minecraft` tree.
+- **Dell OptiPlex**: Secondary / Staging host (lower spec than HP Desk). Designated for auxiliary server instances, staging workloads, or secondary failover.
+- **Steamlinux**: Disposable local workstation for non-live development, unit tests, and static linting. Never hosts production world data.
 
-## Direction under reassessment
+## Product & Architecture Reassessment Status
 
-The desired product is a simple Crafty-backed web experience for users, tenants, isolated servers/world sets, and server-pinned version profiles. The user is not satisfied with the current custom-code shape and specifically identified excessive magic numbers. The next session is dedicated to documentation and README work: clarify the product and present status, reconcile stale/superseded explanations, inventory those values, separate configurable policy from fixed contracts, and decide which custom `mcctl` surfaces should remain, be simplified, or be removed.
+The product architecture is codified around a simple Crafty-backed web management experience:
+$$\text{User Membership} \longrightarrow \text{Tenant} \longrightarrow \text{Server} \longrightarrow \text{World Set} \longrightarrow \text{Immutable Profile Revision}$$
+
+- Crafty is the single authority for server catalog, lifecycle, web dashboard, and user authentication.
+- `mcctl` retains only fail-closed start admission (`gate exec`), SHA-256 profile verification, read-only WAL metric sampling/alerting, and Code Atlas drift checking.
+- Magic numbers in `internal/` have been cataloged with clear separation between fixed invariants (protocols/pins) and policy parameters to be extracted into `internal/config/`.
+- `mass-implement` skill has been updated with a mandatory PR-Imposed Changes & Review Enforcement Gate.
 
 ## Open operational blocker
 

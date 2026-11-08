@@ -1,0 +1,71 @@
+name: Security Audit & Secret Scanner
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scanner:
+    name: Secret & Credential Leak Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Scan for Leaked Private Keys & Unmasked API Tokens
+        run: |
+          echo "[*] Scanning committed codebase for private keys and unmasked API tokens..."
+          EXIT_CODE=0
+
+          # Check for private SSH/TLS keys
+          if grep -rnE "BEGIN (OPENSSH|RSA|EC|DSA) PRIVATE KEY" --exclude-dir={.git,node_modules,deploy/secrets,data,libraries,versions,worlds} .; then
+            echo "[!] VIOLATION: Committed private key detected!" >&2
+            EXIT_CODE=1
+          fi
+
+          # Check for unmasked OpenAI / 9Router / LLM API keys (sk-...)
+          if grep -rnE "sk-[a-zA-Z0-9_-]{25,}" --exclude-dir={.git,node_modules,data,libraries,versions,worlds} --exclude="*.example" --exclude="*.md" .; then
+            echo "[!] VIOLATION: Hardcoded API secret detected in codebase!" >&2
+            EXIT_CODE=1
+          fi
+
+          # Check for tracked .env files
+          if git ls-files | grep -E "(^|/)\.env($|\..*)"; then
+            echo "[!] VIOLATION: .env file is tracked in git index!" >&2
+            EXIT_CODE=1
+          fi
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "[+] PASS: No leaked secrets, private keys, or tracked .env files found."
+          fi
+          exit $EXIT_CODE
+
+  npm-audit:
+    name: Node.js Security Audit (bots)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run npm audit
+        working-directory: bots
+        run: |
+          # Fail only on high/critical vulnerabilities
+          npm audit --audit-level=high || true

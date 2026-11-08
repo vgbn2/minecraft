@@ -27,9 +27,14 @@ versions/
 
 # Plugin binaries and generated caches
 plugins/**/*.jar
+tools/plugins/**/*.jar
+*.jar
 plugins/.paper-remapped/
+tools/plugins/.paper-remapped/
 plugins/bStats/
+tools/plugins/bStats/
 plugins/spark/tmp/
+tools/plugins/spark/
 
 # Local editor and OS files
 .DS_Store
@@ -49,3 +54,15 @@ control-plane/runtime/
 deploy/secrets/
 *.token
 current-state.json
+
+# Local release exports
+releases/
+
+# Bot runtime dependencies and multi-world storage
+bots/node_modules
+bots/node_modules/
+bots/mc_path_core/target/
+target/
+worlds/
+.claude/
+

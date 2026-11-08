@@ -1,0 +1,24 @@
+[package]
+name = "mc_path_core"
+version = "0.1.0"
+edition = "2024"
+authors = ["vgbn"]
+description = "High-performance native 3D voxel A* pathfinder and kinematics engine for Minecraft bots"
+
+[lib]
+name = "mc_path_core"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "mc-path-fast"
+path = "src/main.rs"
+
+[dependencies]
+# ponytail: zero external dependencies; stdlib BinaryHeap and SIMD bitmasks for instant <0.5s compile and zero bloat
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

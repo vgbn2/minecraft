@@ -1,0 +1,94 @@
+# ==============================================================================
+# Canonical Standard Minecraft Server Plugin Profile
+# Designed for: Ultra-Low Server Load, Fast Connectivity, LOD Streaming, 
+#               Safe Storage, and Robust User Permissions.
+# Target Runtime: Paper 1.21.11 (Java 21)
+# ==============================================================================
+
+server:
+  type: paper
+  version: "1.21.11"
+  java: 21
+  plugins_dir: "plugins"
+
+categories:
+  # ----------------------------------------------------------------------------
+  # 1. ⚡ Connectivity & Network Optimization
+  # ----------------------------------------------------------------------------
+  connectivity_and_network:
+    description: "Multi-version client compatibility and low-latency packet flow."
+    plugins:
+      - name: "ViaVersion"
+        id: "viaversion"
+        version: "5.12.0"
+        description: "Enables players on newer and older Minecraft versions to connect seamlessly."
+        source: "modrinth"
+        url: "https://cdn.modrinth.com/data/P1OZGk5p/versions/JXTvHIIc/ViaVersion-5.12.0-SNAPSHOT.jar"
+        filename: "ViaVersion-5.12.0-SNAPSHOT.jar"
+        enabled: true
+
+  # ----------------------------------------------------------------------------
+  # 2. 🔥 Server Load & Performance Optimization
+  # ----------------------------------------------------------------------------
+  server_load_and_performance:
+    description: "Eliminates runtime exploration lag and monitors tick rate (TPS/MSPT)."
+    plugins:
+      - name: "Chunky"
+        id: "chunky"
+        version: "1.4.36"
+        description: "Asynchronously pre-generates world chunks in the background so player exploration causes 0% server lag."
+        source: "modrinth"
+        url: "https://cdn.modrinth.com/data/fALzjamp/versions/SmZRkQyR/Chunky-Bukkit-1.4.36.jar"
+        filename: "Chunky-Bukkit-1.4.36.jar"
+        enabled: true
+
+      # Note: 'spark' is natively built into Paper (/spark profiler, /spark health, /spark tps).
+
+  # ----------------------------------------------------------------------------
+  # 3. 🌐 LODs & World Streaming (Voxy Integration)
+  # ----------------------------------------------------------------------------
+  lods_and_world_streaming:
+    description: "Streams pre-generated terrain to client-side LOD engines (Voxy)."
+    plugins:
+      - name: "LOD Server Support"
+        id: "lod-server-support"
+        version: "0.11.1+1.21.11"
+        description: "Streams pre-generated Chunky LOD data directly to Voxy clients for instant 64+ chunk distant horizons."
+        source: "modrinth"
+        url: "https://cdn.modrinth.com/data/lKiXKLvv/versions/ldsR0Y9Z/lod-server-support-paper-0.11.1%2B1.21.11.jar"
+        filename: "lod-server-support-paper-0.11.1+1.21.11.jar"
+        enabled: true
+
+  # ----------------------------------------------------------------------------
+  # 4. 👤 User Data & Permissions Management
+  # ----------------------------------------------------------------------------
+  user_data_and_permissions:
+    description: "Lightweight permission hierarchies, user access control, and admin tools."
+    plugins:
+      - name: "LuckPerms"
+        id: "luckperms"
+        version: "5.5.71"
+        description: "Industry-standard, high-performance permission management with in-browser web editor (/lp editor)."
+        source: "modrinth"
+        url: "https://cdn.modrinth.com/data/Vebnzrzj/versions/b0mk8uS6/LuckPerms-Bukkit-5.5.71.jar"
+        filename: "LuckPerms-Bukkit-5.5.71.jar"
+        enabled: true
+
+      - name: "WorldEdit"
+        id: "worldedit"
+        version: "7.3.10-beta-01"
+        description: "In-game terrain manipulation, clipboard brush, and builder tools."
+        source: "modrinth"
+        url: "https://cdn.modrinth.com/data/1u6JkXh5/versions/HIoAq6RI/worldedit-bukkit-7.3.10-beta-01.jar"
+        filename: "worldedit-bukkit-7.3.10-beta-01.jar"
+        enabled: true
+
+  # ----------------------------------------------------------------------------
+  # 5. 💾 Storage & Safe Backup Protocol
+  # ----------------------------------------------------------------------------
+  storage_and_backups:
+    description: "Automated snapshot protocol with low disk overhead."
+    details:
+      backup_schedule: "Twice daily at 04:00 and 16:00 (cron: recurring-backup)"
+      storage_location: "/mnt/sda1/backups and /mnt/sda1/snapshot_*"
+      power_saving: "HDD automatic standby spin-down post-backup"

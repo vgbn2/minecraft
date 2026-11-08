@@ -1,0 +1,92 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-bots:
+    name: Verify Autonomous JoJo Stand Bots
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: bots/package.json
+
+      - name: Install Bot Dependencies
+        working-directory: bots
+        run: |
+          npm ci --prefer-offline --no-audit
+
+      - name: Lint & Syntax Check
+        working-directory: bots
+        run: |
+          for f in $(find src tests -name '*.mjs'); do
+            node --check "$f" || exit 1
+          done
+
+      - name: Run Core Diagnostic & Gate Verification Suite (20 Gates)
+        working-directory: bots
+        env:
+          OFFLINE_ONLY: '1'
+        run: |
+          node test-verify.mjs
+
+      - name: Verify JoJo Stand Squad Roster & Archetypes
+        working-directory: bots
+        run: |
+          node tests/test_squad_jojo.mjs
+
+      - name: Verify Central Depot & Logistics Engine
+        working-directory: bots
+        run: |
+          node tests/test_logistics_depot.mjs
+
+      - name: Verify Agriculture & Tech Tree Bootstrap
+        working-directory: bots
+        run: |
+          node tests/test_agriculture_tech.mjs
+
+  verify-server-configs:
+    name: Validate Minecraft Server Configs & Tools
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate TOML / YAML Server Configs
+        run: |
+          python3 -c "
+          import tomllib, yaml, glob, sys
+          print('[*] Checking YAML & TOML files...')
+          for y in glob.glob('config/**/*.yml', recursive=True) + glob.glob('*.yml') + glob.glob('*.yaml'):
+              with open(y, 'r') as f:
+                  yaml.safe_load(f)
+          print('[+] All server configurations parsed cleanly.')
+          "

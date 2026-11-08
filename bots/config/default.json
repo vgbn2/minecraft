@@ -1,0 +1,9 @@
+{
+  "bot_name": "Companion",
+  "ai_enabled": true,
+  "api_base": "http://127.0.0.1:20128/v1",
+  "api_key": "",
+  "model": "ag/gemini-3.8-flash",
+  "max_distance": 96,
+  "view_distance": 6
+}
