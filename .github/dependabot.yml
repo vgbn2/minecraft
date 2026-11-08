@@ -1,0 +1,45 @@
+version: 2
+updates:
+  # Node.js Bot Ecosystem
+  - package-ecosystem: "npm"
+    directory: "/bots"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      bot-dependencies:
+        patterns:
+          - "*"
+
+  # Go Control Plane (mcctl)
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+
+  # Rust Native Kinematics (mc_path_core)
+  - package-ecosystem: "cargo"
+    directory: "/bots/mc_path_core"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
+
+  # GitHub Actions Workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"
