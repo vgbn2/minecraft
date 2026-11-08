@@ -22,7 +22,7 @@ To report a vulnerability:
 Include in your report:
 - A clear description of the vulnerability and its potential exploit impact.
 - Step-by-step reproduction instructions or a minimal proof-of-concept (PoC).
-- Affected subsystem (e.g. Pumpkin/Paper server config, `mcctl` admission gate, bot IPC bus, Crafty API controller).
+- Affected subsystem (e.g. Pumpkin/Paper server config, `mc-control` admission gate, bot IPC bus, Crafty API controller).
 
 ### Response Timeline
 
@@ -38,10 +38,10 @@ Include in your report:
 
 ### In Scope for Security Review
 - **Loopback & Ingress Enforcement**: Unauthorized WAN binding or bypass of `127.0.0.1` restriction on ports `25565`, `25566`, and `25575`.
-- **RCON & Control Plane Security**: Command injection or authentication bypass via `tools/rcon.py` or `mcctl`.
+- **RCON & Control Plane Security**: Command injection or authentication bypass via `tools/rcon.py` or `mc-control`.
 - **IPC Bus & Filesystem Boundaries**: Privilege escalation, race conditions (TOCTOU), or permission tampering across volatile IPC channels (`/dev/shm/mc-bot/`).
 - **Secret Isolation**: Exposure of Playit.gg credentials, Tailscale auth keys, or AI proxy (`9Router`) bearer tokens.
-- **Fail-Closed Admission**: Flaws in SHA-256 bytecode validation in `mcctl` that could allow unapproved executable JAR execution.
+- **Fail-Closed Admission**: Flaws in SHA-256 bytecode validation in `mc-control` that could allow unapproved executable JAR execution.
 
 ### Out of Scope
 - Vanilla Minecraft game glitches and client-side rendering anomalies.
@@ -57,3 +57,4 @@ Include in your report:
 2. **Strict Loopback Binding**: Game sockets and management APIs never bind to `0.0.0.0`. Remote traffic passes exclusively through encrypted Tailscale mesh interfaces or authenticated Playit tunnels.
 3. **Volatile In-Memory IPC**: Autonomous bot communication operates entirely in RAM (`/dev/shm`), preventing persistent file tampering and zeroing disk write amplification.
 4. **Zero-Key CI Testing**: The entire 21-gate bot verification test suite executes keyless against recorded mocks and local proxies.
+5. **Fail-Closed Admission**: `mc-control` halts server execution if bytecode hash does not match approved profile or if host memory headroom is $< 3\,\text{GiB}$.

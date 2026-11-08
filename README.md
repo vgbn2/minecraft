@@ -7,7 +7,7 @@
 ![Go Version](https://img.shields.io/badge/Go-1.22%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-purple)
 
-This repository provides an institutional, polyglot Minecraft infrastructure stack combining a **Rust-based high-throughput game core**, a **Go fail-closed control plane (`mcctl`)**, and an **autonomous survival bot squad** driven by local LAN AI (`9Router`) and physical game invariants.
+This repository provides an institutional, polyglot Minecraft infrastructure stack combining a **Rust-based high-throughput game core**, a **Go fail-closed control plane (`mc-control`, alias: `mcctl`)**, and an **autonomous survival bot squad** driven by local LAN AI (`9Router`) and physical game invariants.
 
 ---
 
@@ -21,7 +21,7 @@ This repository provides an institutional, polyglot Minecraft infrastructure sta
 │   │        RUST CORE          │ │        GO CONTROL         │ │     NODE.JS SQUAD    │ │
 │   │ (High-Throughput Physics) │ │(Infrastructure Supervisor)│ │ (Tactical Intelligence)│ │
 │   ├───────────────────────────┤ ├───────────────────────────┤ ├──────────────────────┤ │
-│   │ • Pumpkin Rust Server     │ │ • mcctl Daemon & CLI      │ │ • Task Orchestrator  │ │
+│   │ • Pumpkin Rust Server     │ │ • mc-control Daemon & CLI │ │ • Task Orchestrator  │ │
 │   │   (Microsecond TPS Loop)  │ │ • Fail-Closed Admission   │ │ • 9Router AI Adapter │ │
 │   │ • mc_path_core Engine     │ │ • SQLite WAL Telemetry    │ │ • Autonomous Bots    │ │
 │   │   (SIMD A* 3D Pathfinder) │ │ • Crafty API Integration  │ │ • Dynamic Behavior   │ │
@@ -39,7 +39,7 @@ This repository provides an institutional, polyglot Minecraft infrastructure sta
 | Technology | Responsibility | Rationale | Performance & Safety Guarantee |
 | :--- | :--- | :--- | :--- |
 | **Rust** | **High-Throughput Engine & Voxel Kinematics** | Zero garbage collection stalls, sub-millisecond tick loops, SIMD-accelerated voxel bitmasks, and maximum chunk load capacity per agent. | Sub-millisecond tick dispatch; zero V8 heap overhead for raw chunk processing. |
-| **Go** | **Control Plane & Process Supervision (`mcctl`)** | Static single-binary deployment with zero dependencies, POSIX process management, deterministic memory checks, and lightweight system telemetry. | Instant compilation; fail-closed JVM admission gate preventing host memory exhaustion. |
+| **Go** | **Control Plane & Process Supervision (`mc-control`)** | Static single-binary deployment with zero dependencies, POSIX process management, deterministic memory checks, and lightweight system telemetry. | Instant compilation; fail-closed JVM admission gate preventing host memory exhaustion. |
 | **JavaScript (Node.js)** | **Tactical Intelligence & High-Level Behaviors** | Rapidly iterable event-driven state machines, native Mineflayer ecosystem primitives, and seamless OpenAI-compatible LLM streaming integration via 9Router. | Asynchronous event loop with non-blocking `/dev/shm` tmpfs IPC; fast behavior tuning without recompiling native binaries. |
 
 ---
@@ -59,7 +59,7 @@ This repository provides an institutional, polyglot Minecraft infrastructure sta
   - Patrols estate perimeters, illuminates unlit chunks, and engages hostile mobs using 3.5m–4.0m spacing kinematics.
   - Mitigates creeper detonation fuses by executing rapid backwards jump-slicing and clears block suffocation hazards with tactical escape routines.
 * **Fail-Closed Multi-Tenant Server Governance**:
-  - Employs `mcctl` as a pre-execution safety gate to inspect JAR SHA-256 bytecode hashes, enforce memory limits, and validate plugin manifests before JVM startup.
+  - Employs `mc-control` as a pre-execution safety gate to inspect JAR SHA-256 bytecode hashes, enforce memory limits, and validate plugin manifests before JVM startup.
 
 ---
 
@@ -67,7 +67,7 @@ This repository provides an institutional, polyglot Minecraft infrastructure sta
 
 ### System Prerequisites
 - **Node.js**: `v18.x` or `v20.x` LTS (`npm >= 10.0.0`)
-- **Go**: `1.22+` (for `mcctl` control plane)
+- **Go**: `1.22+` (for `mc-control` control plane)
 - **Rust**: `2024 Edition` (Cargo toolchain with `clippy`)
 - **Docker & Docker Compose**: (optional, for containerized server hosting)
 - **Minecraft Client**: Version `1.21.11` (or protocol `777` compatible client)
@@ -201,7 +201,7 @@ This ecosystem builds upon the groundbreaking work of several open-source commun
 * **[PaperMC](https://papermc.io)**: High-performance Java Minecraft server implementation with optimized world ticking, async chunk loading, and Aikar's tuned JVM GC profiling.
 * **[Crafty Controller](https://craftycontrol.com)**: Enterprise Minecraft server management platform and OpenAPI REST v2 control plane developed by Arcadia Technology LLC.
 * **[9Router](https://github.com/vgbn2/9router)**: Local high-throughput multi-provider AI proxy and token routing gateway facilitating offline and zero-cost companion bot reasoning.
-* **[Modernc.org / SQLite](https://gitlab.com/cznic/sqlite)**: Pure Go memory-safe SQLite engine powering `mcctl` state validation and telemetry with zero CGO dependencies.
+* **[Modernc.org / SQLite](https://gitlab.com/cznic/sqlite)**: Pure Go memory-safe SQLite engine powering `mc-control` state validation and telemetry with zero CGO dependencies.
 * **Open-Source Homelab Community**: Testers, infrastructure maintainers, and contributors across Proxmox LXC sandboxes.
 
 ---

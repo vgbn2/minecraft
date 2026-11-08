@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "state_dir": "/var/lib/mcctl",
+  "profile_dir": "/etc/mcctl/profiles",
+  "server_root": "/srv/minecraft/servers",
+  "backup_staging_root": "/srv/minecraft/recovery-points",
+  "snapshot_path": "/run/mcctl/current-state.json",
+  "monitor_db_path": "/var/lib/mcctl/monitor.db",
+  "operation_lock_path": "/run/lock/mcctl-operation.lock",
+  "max_snapshot_age_seconds": 90,
+  "managed_heap_max_mb": 6656,
+  "min_available_memory_mb": 3072,
+  "native_overhead_mb": 512,
+  "reservation_ttl_seconds": 300,
+  "crafty_service_uid": 1500,
+  "crafty": {
+    "base_url": "https://127.0.0.1:8443",
+    "token_file": "/etc/mcctl/secrets/crafty.token",
+    "openapi_version": "2.0.1",
+    "openapi_sha256": "bfadb88c5bba1996e2a5ffe6102f266ba257eae662470f6210896c16518dfb3b",
+    "allow_insecure_local_tls": true,
+    "request_timeout_seconds": 10
+  },
+  "root_storage": {"path": "/", "min_free_percent": 10, "min_free_bytes": 21474836480, "min_inode_percent": 10},
+  "server_storage": {"path": "/srv/minecraft/servers", "min_free_percent": 10, "min_free_bytes": 21474836480, "min_inode_percent": 10},
+  "backup_storage": {"path": "/srv/minecraft/recovery-points", "min_free_percent": 15, "min_free_bytes": 0, "min_inode_percent": 0}
+}

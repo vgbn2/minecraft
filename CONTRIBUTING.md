@@ -13,7 +13,7 @@ Thank you for your interest in contributing to the Minecraft Infrastructure and 
    - Design code and name modules around the fundamental game engine invariants (`soil_hydration`, `container_bus`, `voxel_schematic`, `block_excavation`), never around transient symptoms (\"bots are hungry\", \"fix broken movement\").
 3. **The Polyglot Triad Separation**:
    - **Rust (`bots/mc_path_core`)**: Zero-GC high-throughput 3D voxel A* pathfinding, SIMD bitmasks, and sub-millisecond kinematics.
-   - **Go (`cmd/mcctl`)**: Control plane lifecycle, fail-closed JAR bytecode admission, and resource monitoring.
+   - **Go (`cmd/mc-control`, alias: `mcctl`)**: Control plane lifecycle, fail-closed JAR bytecode admission, and resource monitoring.
    - **JavaScript / Node.js (`bots/`)**: Tactical companion state machines, dynamic behaviors, and Mineflayer event routing.
 4. **Hardened Ingress & Zero SSD Wear**:
    - Services bind strictly to `127.0.0.1`.
@@ -26,7 +26,7 @@ Thank you for your interest in contributing to the Minecraft Infrastructure and 
 - **Node.js**: `v18.x` or `v20.x` LTS.
 - **Python**: `3.11+` (with `pyyaml` for config validation).
 - **Rust**: `2024 Edition` (Cargo toolchain with `clippy`).
-- **Go**: `1.22+` (for `mcctl` control plane).
+- **Go**: `1.22+` (for `mc-control` control plane).
 - **Git**: `2.25+`.
 
 ---
@@ -73,7 +73,7 @@ print('Configs valid.')
 - Zero external crate dependencies for core math; utilize stdlib `BinaryHeap` and SIMD bitwise operations.
 - All code must pass `cargo fmt --check` and `cargo clippy`.
 
-### Go (`cmd/mcctl`)
+### Go (`cmd/mc-control`)
 - Single static binary build with zero CGO dependencies.
 - Fail-closed admission: any unchecksummed or unapproved JAR execution is rejected with non-zero exit code.
 

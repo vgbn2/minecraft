@@ -51,7 +51,7 @@ func Run(ctx context.Context, rawArgs []string, stdout, stderr io.Writer) int {
 		if jsonOutput {
 			emitJSON(stdout, envelope{OK: false, Command: strings.Join(args, " "), Error: &errorBody{Code: "command_failed", Message: err.Error()}})
 		} else {
-			fmt.Fprintf(stderr, "mcctl: %v\n", err)
+			fmt.Fprintf(stderr, "mc-control: %v\n", err)
 		}
 		return 2
 	}
@@ -69,7 +69,7 @@ func Run(ctx context.Context, rawArgs []string, stdout, stderr io.Writer) int {
 func dispatch(ctx context.Context, args []string, stderr io.Writer) (response, error) {
 	switch args[0] {
 	case "version":
-		return response{command: "version", data: map[string]string{"version": Version, "crafty_openapi": crafty.ContractVersion}, human: "mcctl " + Version + "\n"}, nil
+		return response{command: "version", data: map[string]string{"version": Version, "crafty_openapi": crafty.ContractVersion}, human: "mc-control " + Version + "\n"}, nil
 	case "config":
 		return configCommand(args[1:], stderr)
 	case "profile":
@@ -91,7 +91,7 @@ func dispatch(ctx context.Context, args []string, stderr io.Writer) (response, e
 	case "atlas":
 		return atlasCommand(ctx, args[1:], stderr)
 	default:
-		return response{}, fmt.Errorf("unknown command %q; run mcctl help", args[0])
+		return response{}, fmt.Errorf("unknown command %q; run mc-control help", args[0])
 	}
 }
 
@@ -259,22 +259,22 @@ func writeJSONAtomic(path string, value any) error {
 	return statefile.WriteJSONAtomic(path, value)
 }
 func helpText() string {
-	return `mcctl - Crafty client, admission controller, monitor, and audit CLI
+	return `mc-control (alias: mcctl) - Crafty client, admission controller, monitor, and audit CLI
 
 Usage:
-  mcctl [--json] version
-  mcctl [--json] config validate --file <path>
-  mcctl [--json] profile validate --file <path>
-  mcctl [--json] doctor --config <path>
-  mcctl [--json] crafty servers|stats|action --config <path> [--server <uuid>] [--action <name>]
-  mcctl [--json] crafty contract-verify --config <path> --file <openapi.yml>
-  mcctl [--json] monitor sample --config <path>
-  mcctl [--json] monitor recover --config <path> --confirm quarantine-corrupt-monitor
-  mcctl [--json] health|alerts --config <path>
-  mcctl [--json] audit --config <path>
-  mcctl [--json] gate check --config <path> --profile <path>
-  mcctl gate exec --config <path> --profile <path> -- java <approved args>
-  mcctl [--json] atlas check|sync --root <repo>
+  mc-control [--json] version
+  mc-control [--json] config validate --file <path>
+  mc-control [--json] profile validate --file <path>
+  mc-control [--json] doctor --config <path>
+  mc-control [--json] crafty servers|stats|action --config <path> [--server <uuid>] [--action <name>]
+  mc-control [--json] crafty contract-verify --config <path> --file <openapi.yml>
+  mc-control [--json] monitor sample --config <path>
+  mc-control [--json] monitor recover --config <path> --confirm quarantine-corrupt-monitor
+  mc-control [--json] health|alerts --config <path>
+  mc-control [--json] audit --config <path>
+  mc-control [--json] gate check --config <path> --profile <path>
+  mc-control gate exec --config <path> --profile <path> -- java <approved args>
+  mc-control [--json] atlas check|sync --root <repo>
 
 Crafty owns server lifecycle and catalog state. Gate exec is the only approved JVM launch command.
 `

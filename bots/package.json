@@ -9,6 +9,10 @@
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
+  "scripts": {
+    "test": "node tests/test-verify.mjs",
+    "audit:security": "node ../tools/audit-security.mjs"
+  },
   "dependencies": {
     "mineflayer": "^4.39.0",
     "mineflayer-armor-manager": "^2.0.1",
