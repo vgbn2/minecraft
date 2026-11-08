@@ -4,6 +4,11 @@
   "description": "Low-resource AI-powered Minecraft companion agent",
   "type": "module",
   "main": "companion.mjs",
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "dependencies": {
     "mineflayer": "^4.39.0",
     "mineflayer-armor-manager": "^2.0.1",

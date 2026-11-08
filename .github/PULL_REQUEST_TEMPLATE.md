@@ -1,33 +1,65 @@
-## Description
+## Summary
 
-<!-- Provide a concise summary of the change and its underlying causal motivation. -->
+Describe the problem, the change, and why this scope is necessary.
 
-## Subsystem & Polyglot Layer
+## Related Issues
 
-- [ ] **Rust Core (`mc_path_core`)**: Kinematics, A* pathfinding, SIMD voxel bitmasks.
-- [ ] **Go Control Plane (`cmd/mcctl`)**: Admission gate, resource monitor, Crafty supervisor.
-- [ ] **Node.js Squad (`bots/`)**: Causal skills, state machines, Mineflayer bindings.
-- [ ] **Server Configuration & Infrastructure**: Paper/Pumpkin configs, Docker/LXC hardening.
-- [ ] **CI / Security / Governance**: Workflows, policies, documentation.
+<!-- Link relevant issues: Closes #123, Fixes #456, Relates to #789 -->
+- Closes #
+- Relates to #
 
-## Causal Element & Physical Invariant
+## Affected Areas
 
-<!-- Which underlying game mechanic or system invariant does this change preserve or model? -->
-<!-- E.g., Chebyshev hydration (9x9), window slot state machine, topological Y-ascending placement -->
+- [ ] Rust core / kinematics / A* pathfinding (`bots/mc_path_core`)
+- [ ] Go control plane / admission gates / Crafty client (`cmd/mcctl`, `internal/`)
+- [ ] Node.js bot squad / behavioral state machines (`bots/src/`)
+- [ ] Causal game mechanics (hydration, container bus, voxels, excavation)
+- [ ] Server configuration / PaperMC / Pumpkin (`config/`, root YAMLs)
+- [ ] Infrastructure / Docker Compose / LXC hardening (`deploy/`)
+- [ ] CI / Security / Governance (`.github/`, policies)
+- [ ] Other: <!-- describe -->
 
-## Verification Evidence
+## Evidence
 
-<!-- Paste terminal output proving all verification gates pass locally. -->
+List commands actually run and their outcomes. State what was not run and why.
 
-```bash
-cd bots && node test-verify.mjs
-# Paste result: (e.g. SUMMARY: 21 PASSED, 0 FAILED)
+```text
+command:
+outcome:
+evidence scope:
 ```
 
-## Checklist
+### Canonical Protocols Executed
+- [ ] Polyglot Triad: Rust (kinematics) / Go (control plane) / JS (tactical AI) separation preserved.
+- [ ] Zero-Key Development: All tests execute keyless and offline (`OFFLINE_ONLY=1`).
+- [ ] Causal Elements: Mechanics designed around underlying game engine physics rather than symptoms.
+- [ ] Diagnostic Gates: All 21 verification gates passed (`node test-verify.mjs`).
+- [ ] Go Admission & Contracts: Go package test suite passed (`go test ./...`).
+- [ ] Server Hardening: Loopback binding (`127.0.0.1`) and volatile tmpfs IPC (`/dev/shm`) enforced.
 
-- [ ] I have read and adhered to [CONTRIBUTING.md](../CONTRIBUTING.md) and [SECURITY.md](../SECURITY.md).
-- [ ] No private keys, `.env` files, or unmasked API secrets are included in this changeset.
-- [ ] All 21 diagnostic verification gates pass with zero skips or failures.
-- [ ] Backward compatibility with existing shims is preserved.
-- [ ] Code follows vertical stacking formatting conventions.
+### Test Verification
+- [ ] Behavior changes include an appropriate unit or integration test.
+- [ ] Integration evidence shows relevant input, transforms, counts, and invariants where applicable.
+- [ ] No test was weakened, skipped, suppressed, or replaced merely to create a passing result.
+
+## Safety and Operations
+
+- [ ] This PR does not alter network exposure, authentication, secrets, or host filesystem boundaries.
+- [ ] This PR alters one of those boundaries and identifies the named maintainer who approved it: <!-- name -->
+- [ ] Not applicable: explain why the changed area cannot affect those boundaries. <!-- explanation -->
+
+## Breaking Changes & Migration
+
+- [ ] **No Breaking Changes**: 100% backward-compatible with preceding commit.
+- [ ] **Breaking Change**: Protocol or configuration schema bump required; migration instructions provided: <!-- details -->
+
+## Rollback Plan
+
+<!-- Describe steps to cleanly roll back this PR if unexpected defects arise -->
+- [ ] Git revert is clean and leaves no orphaned state: `git revert -m 1 <merge_commit_sha>`
+- [ ] Bot processes can be recalled immediately: `./bots/mc-bot.sh --remote squad stop`
+- [ ] Server can be rolled back via existing immutable profile.
+
+## Contribution Attestation
+
+- [ ] I have authority to submit this contribution and permit it to be used under this repository's [MIT License](../LICENSE).

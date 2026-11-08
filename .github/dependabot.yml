@@ -1,17 +1,22 @@
 version: 2
 updates:
-  # Node.js Bot Ecosystem
+  # Node.js Bot Ecosystem (Mineflayer & Autonomous Agents)
   - package-ecosystem: "npm"
     directory: "/bots"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "mineflayer"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vec3"
+        update-types: ["version-update:semver-major"]
     groups:
       bot-dependencies:
         patterns:
           - "*"
 
-  # Go Control Plane (mcctl)
+  # Go Control Plane (mcctl Lifecycle & Admission Gates)
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
@@ -22,7 +27,7 @@ updates:
         patterns:
           - "*"
 
-  # Rust Native Kinematics (mc_path_core)
+  # Rust Native Kinematics Core (mc_path_core 3D A* Engine)
   - package-ecosystem: "cargo"
     directory: "/bots/mc_path_core"
     schedule:
@@ -37,7 +42,7 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
     open-pull-requests-limit: 2
     groups:
       actions-dependencies:
