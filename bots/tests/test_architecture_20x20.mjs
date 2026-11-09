@@ -171,6 +171,8 @@ await testAsync('Gate 6: AutonomousArchitectureRunner execution simulation', asy
   }
 
   const runner = new AutonomousArchitectureRunner(mockBot)
+  assert.ok(runner.scaffold instanceof ScaffoldController, 'Runner must instantiate ScaffoldController')
+  assert.strictEqual(runner.scaffold.bot, mockBot, 'ScaffoldController must bind bot instance')
   const miniPlan = generateHouse20x20Plan(new Vec3(0, 64, 0)).slice(0, 50)
 
   let progressCalls = 0

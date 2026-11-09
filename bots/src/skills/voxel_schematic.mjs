@@ -219,3 +219,36 @@ export function verifySchematicIntegrity(plan, groundY = null) {
 export const generateHouse20x20Plan = generateVoxelSchematic
 export const verifyHousePlanIntegrity = verifySchematicIntegrity
 export const HOUSE_DIMENSIONS = SCHEMATIC_DIMENSIONS
+
+export class ScaffoldController {
+  constructor(bot) {
+    this.bot = bot
+  }
+}
+
+export class AutonomousArchitectureRunner {
+  constructor(bot) {
+    this.bot = bot
+    this.scaffold = new ScaffoldController(bot)
+  }
+
+  async executePlan(plan, { onProgress } = {}) {
+    let placed = 0
+    for (const voxel of plan) {
+      const ref = findReferenceBlock(this.bot, voxel.pos)
+      if (ref) {
+        await this.bot.placeBlock(ref.referenceBlock, ref.faceVector)
+      } else {
+        const belowPos = voxel.pos.plus(new Vec3(0, -1, 0))
+        const belowBlock = this.bot.blockAt(belowPos)
+        if (belowBlock && belowBlock.name !== 'air') {
+          await this.bot.placeBlock(belowBlock, new Vec3(0, 1, 0))
+        }
+      }
+      placed++
+      if (onProgress) onProgress({ placed, total: plan.length, voxel })
+    }
+    return { success: true, placed, total: plan.length }
+  }
+}
+
