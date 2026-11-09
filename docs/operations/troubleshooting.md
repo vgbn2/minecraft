@@ -115,3 +115,49 @@ python3 tools/rcon.py reload
   '
   ```
 * Pin verified Java 21 / 17 builds in `plugins.yaml`.
+
+---
+
+## 5. 🤖 Mineflayer ESM / CommonJS Plugin Loader & Auto-Eat Contract Desync
+
+### Symptoms:
+* Bot verification test suite crashes on startup with:
+  `SyntaxError: The requested module 'mineflayer-auto-eat' does not provide an export named 'default'`
+  or
+  `TypeError: bot.hasPlugin is not a function`
+
+### Root Cause:
+* In `mineflayer-auto-eat@5.0.3+`, the package was converted from CommonJS to pure ESM (`"type": "module"`), removing the default export in favor of a named `loader(bot)` export.
+* The modern `loader(bot)` function executes `if (!bot.hasPlugin(plugin)) bot.loadPlugin(plugin)`. Test harnesses and mock bots implementing only `bot.loadPlugin` throw a `TypeError`.
+* In `mineflayer-auto-eat` v5, options moved from `bot.autoEat.options` to `bot.autoEat.opts` / `bot.autoEat.setOpts()`, and auto-eat lifecycle methods changed from `disable()`/`enable()` to `disableAuto()`/`enableAuto()`.
+
+### Permanent Fix:
+1. **Bilingual Plugin Resolver (`bots/src/core/client.mjs` & `bots/tests/test-verify.mjs`):**
+   ```javascript
+   import * as autoEatPkg from 'mineflayer-auto-eat'
+   const autoEat = autoEatPkg.loader || autoEatPkg.plugin || autoEatPkg.default?.plugin || autoEatPkg.default?.loader || autoEatPkg.default
+   ```
+2. **Mock Bot Idempotency Registry (`bots/tests/test-verify.mjs`):**
+   ```javascript
+   const _plugins = new Set()
+   bot.hasPlugin = (plugin) => _plugins.has(plugin)
+   bot.loadPlugin = (plugin) => {
+     const fn = plugin?.default || plugin
+     if (typeof fn === 'function') {
+       if (_plugins.has(fn)) return
+       _plugins.add(fn)
+       fn(bot)
+     }
+   }
+   ```
+3. **Dual-Version Options & Lifecycle Shims (`bots/src/index.mjs` & `bots/src/skills/block_excavation.mjs`):**
+   ```javascript
+   // Options
+   const opts = bot.autoEat.opts || bot.autoEat.options || {}
+   if (typeof bot.autoEat.setOpts === 'function') bot.autoEat.setOpts({ priority: 'foodPoints' })
+
+   // Lifecycle
+   bot.autoEat?.disable?.() || bot.autoEat?.disableAuto?.()
+   bot.autoEat?.enable?.() || bot.autoEat?.enableAuto?.()
+   ```
+
