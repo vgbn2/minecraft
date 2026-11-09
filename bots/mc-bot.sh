@@ -398,7 +398,11 @@ remote_ssh() {
             auth_sock="/run/user/$(id -u)/gcr/ssh"
         fi
     fi
-    SSH_AUTH_SOCK="${auth_sock}" ssh -o BatchMode=yes -o ConnectTimeout=3 "${REMOTE_USER}@${REMOTE_HOST}" "$@"
+    if SSH_AUTH_SOCK="${auth_sock}" ssh -o BatchMode=yes -o ConnectTimeout=1 "${REMOTE_USER}@${REMOTE_HOST}" true >/dev/null 2>&1; then
+        SSH_AUTH_SOCK="${auth_sock}" ssh -o BatchMode=yes -o ConnectTimeout=5 "${REMOTE_USER}@${REMOTE_HOST}" "$@"
+    else
+        SSH_AUTH_SOCK="${auth_sock}" ssh -o BatchMode=yes -o ConnectTimeout=5 root@100.120.66.1 "ssh -o BatchMode=yes ${REMOTE_USER}@${REMOTE_HOST} \"\$*\""
+    fi
 }
 
 remote_is_reachable() {
@@ -413,14 +417,19 @@ remote_sync_bot() {
     echo "[*] Synchronizing mc-bot modules to Proxmox CT 116 (${REMOTE_HOST}:${REMOTE_DIR})..."
     local auth_sock="${SSH_AUTH_SOCK:-}"
     [[ -S "/run/user/$(id -u)/gcr/ssh" ]] && auth_sock="/run/user/$(id -u)/gcr/ssh"
-    SSH_AUTH_SOCK="${auth_sock}" scp -rq \
-        "${SOURCE_BOT_DIR}/src" \
-        "${SOURCE_BOT_DIR}/config" \
-        "${SOURCE_BOT_DIR}/tests" \
-        "${SOURCE_BOT_DIR}"/*.mjs \
-        "${SOURCE_BOT_DIR}/mc-bot.sh" \
-        "${SOURCE_BOT_DIR}/package.json" \
-        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
+    if SSH_AUTH_SOCK="${auth_sock}" ssh -o BatchMode=yes -o ConnectTimeout=1 "${REMOTE_USER}@${REMOTE_HOST}" true >/dev/null 2>&1; then
+        SSH_AUTH_SOCK="${auth_sock}" scp -rq \
+            "${SOURCE_BOT_DIR}/src" \
+            "${SOURCE_BOT_DIR}/config" \
+            "${SOURCE_BOT_DIR}/tests" \
+            "${SOURCE_BOT_DIR}"/*.mjs \
+            "${SOURCE_BOT_DIR}/mc-bot.sh" \
+            "${SOURCE_BOT_DIR}/package.json" \
+            "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
+    else
+        (cd "${SOURCE_BOT_DIR}" && tar -czf - src config tests *.mjs mc-bot.sh package.json) | \
+            ssh -o BatchMode=yes root@100.120.66.1 "ssh -o BatchMode=yes root@${REMOTE_HOST} 'tar -xzf - -C ${REMOTE_DIR}/'"
+    fi
     echo "[+] Synced modular bot packages to CT 116."
 }
 
@@ -610,6 +619,14 @@ remote_status_squad() {
 
 remote_cmd_squad() {
     remote_ssh "${REMOTE_DIR}/mc-bot.sh squad cmd \"$*\""
+}
+
+remote_squad_repl() {
+    if ! remote_is_reachable; then
+        echo "Error: Cannot reach Proxmox CT 116 at ${REMOTE_HOST} over SSH." >&2
+        return 1
+    fi
+    ssh -t root@100.120.66.1 "ssh -t root@${REMOTE_HOST} '${REMOTE_DIR}/mc-bot.sh squad repl'"
 }
 
 remote_log_squad() {
@@ -873,15 +890,166 @@ status_squad() {
     echo "================================================================================"
 }
 
+squad_repl() {
+    python3 -B - << 'PYEOF'
+import os, sys, glob, json, time, readline
+
+C_RESET = '\033[0m'
+C_BOLD = '\033[1m'
+C_CYAN = '\033[1;36m'
+C_GREEN = '\033[1;32m'
+C_YELLOW = '\033[1;33m'
+C_MAGENTA = '\033[1;35m'
+C_RED = '\033[1;31m'
+C_GRAY = '\033[90m'
+
+LOGS_DIR = os.environ.get('MC_LOGS_DIR', '/dev/shm/mc-bot')
+ROSTER = ['Jotaro', 'Bob', 'Torin', 'Arthur', 'Willow']
+
+def get_squad_status():
+    agents = []
+    home_pids = os.path.expanduser('~/.local/share/mc-bot/pids')
+    for name in ROSTER:
+        pid = 0
+        is_on = False
+        for p in [f'{home_pids}/{name}.pid', f'{LOGS_DIR}/{name}.pid', f'/dev/shm/mc-bot-{name}.pid']:
+            if os.path.isfile(p):
+                try:
+                    with open(p, 'r') as f:
+                        content = f.read().strip()
+                    if content.isdigit():
+                        pid = int(content)
+                        os.kill(pid, 0)
+                        is_on = True
+                        break
+                except (OSError, ValueError):
+                    continue
+        agents.append((name, is_on, pid))
+    return agents
+
+def render_banner():
+    agents = get_squad_status()
+    print(f'{C_BOLD}{C_MAGENTA}================================================================================{C_RESET}')
+    print(f'{C_BOLD}             ✦ JOJO STAND SQUAD INTERACTIVE CONTROL CONSOLE ✦{C_RESET}')
+    print(f'{C_BOLD}{C_MAGENTA}================================================================================{C_RESET}')
+    badges = []
+    for name, is_on, pid in agents:
+        color = C_GREEN if is_on else C_RED
+        status_txt = f'ONLINE:{pid}' if is_on else 'OFFLINE'
+        badges.append(f'{C_BOLD}[{name}: {color}{status_txt}{C_RESET}{C_BOLD}]{C_RESET}')
+    print(' ' + ' '.join(badges))
+    print(f'{C_CYAN}Commands:{C_RESET} <bot> <cmd> | all <cmd> | !<cmd> | status | logs | clear | exit')
+    print(f'{C_BOLD}{C_MAGENTA}--------------------------------------------------------------------------------{C_RESET}')
+
+def dispatch_to_file(path, text):
+    try:
+        with open(path, 'a') as f:
+            f.write(text + '\n')
+        return True
+    except OSError as err:
+        sys.stderr.write(f"Warning: Failed to write to {path}: {err}\n")
+        return False
+
+render_banner()
+
+while True:
+    agents = get_squad_status()
+    on_cnt = len([a for a in agents if a[1]])
+    prompt = f'{C_MAGENTA}✦ jojo-squad{C_RESET} [{C_GREEN}{on_cnt}/{len(agents)} Online{C_RESET}] ❯ '
+    try:
+        line = input(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        print('\nExiting console.')
+        break
+    if not line:
+        continue
+    if line in ('exit', 'quit'):
+        break
+    if line == 'clear':
+        os.system('clear')
+        render_banner()
+        continue
+    if line == 'status':
+        render_banner()
+        continue
+    if line == 'logs':
+        logs = glob.glob(f'{LOGS_DIR}/*.log')
+        for l in logs:
+            bname = os.path.basename(l).replace('.log', '')
+            try:
+                with open(l, 'r') as f:
+                    for row in f.readlines()[-4:]:
+                        print(f'  {C_BOLD}{C_GREEN}[{bname}]{C_RESET} {row.strip()}')
+            except OSError:
+                continue
+        continue
+
+    parts = line.split(maxsplit=1)
+    target, cmd = parts[0], (parts[1] if len(parts) > 1 else '')
+
+    if target.lower() == 'all':
+        for bname in ROSTER:
+            for p in (f'{LOGS_DIR}/{bname}.cmd', f'/dev/shm/mc-bot-{bname}.cmd'):
+                dispatch_to_file(p, cmd)
+        print(f'{C_YELLOW}[BROADCAST]{C_RESET} Dispatched \"{cmd}\" to all active agents.')
+    elif any(b.lower() == target.lower() for b in ROSTER):
+        bname = next(b for b in ROSTER if b.lower() == target.lower())
+        for p in (f'{LOGS_DIR}/{bname}.cmd', f'/dev/shm/mc-bot-{bname}.cmd'):
+            dispatch_to_file(p, cmd)
+        print(f'{C_GREEN}[DIRECT -> {bname}]{C_RESET} Dispatched: \"{cmd}\"')
+    else:
+        for p in (f'{LOGS_DIR}/Jotaro.cmd', f'/dev/shm/mc-bot-Jotaro.cmd'):
+            dispatch_to_file(p, line)
+        print(f'{C_CYAN}[MASTERMIND -> Jotaro]{C_RESET} Dispatched: \"{line}\"')
+
+    time.sleep(0.4)
+    logs = glob.glob(f'{LOGS_DIR}/*.log')
+    recent = []
+    for l in logs:
+        try:
+            with open(l, 'r') as f:
+                lines = f.readlines()[-6:]
+                for row in lines:
+                    if any(k in row for k in ('[CHAT IN]', '[CHAT OUT]', '[AI EXEC]', '[IPC CMD]', '[STAND ACTIVATION]')):
+                        bname = os.path.basename(l).replace('.log', '')
+                        recent.append((row.strip(), bname))
+        except OSError:
+            continue
+    for r, bname in recent[-4:]:
+        print(f'  {C_BOLD}{C_GREEN}[{bname}]{C_RESET} {r}')
+PYEOF
+}
+
 cmd_squad() {
+    local target_bot="Jotaro"
+    if [[ $# -ge 2 ]]; then
+        if [[ -f "${PIDS_DIR}/$1.pid" || "$1" =~ ^(Jotaro|Bob|Torin|Arthur|Willow|all)$ ]]; then
+            target_bot="$1"
+            shift
+        fi
+    fi
     local cmd_text="$*"
     if [[ -z "${cmd_text}" ]]; then
         echo "Error: Command required, e.g. mc-bot squad cmd 'Build a defensive base and gather stone'" >&2
         exit 1
     fi
-    echo "[*] Transmitting mission to Mastermind 'Jotaro' (Star Platinum)..."
-    printf '%s\n' "${cmd_text}" >> "/dev/shm/mc-bot-Jotaro.cmd"
-    echo "[+] Order dispatched to Jotaro for squad orchestration: ${cmd_text}"
+    if [[ "${target_bot}" == "all" ]]; then
+        for b in Jotaro Bob Torin Arthur Willow; do
+            if [[ -d "/dev/shm/mc-bot" ]]; then
+                printf '%s\n' "${cmd_text}" >> "/dev/shm/mc-bot/${b}.cmd"
+            else
+                printf '%s\n' "${cmd_text}" >> "/dev/shm/mc-bot-${b}.cmd"
+            fi
+        done
+        echo "[+] Dispatched broadcast to all squad agents: ${cmd_text}"
+    else
+        if [[ -d "/dev/shm/mc-bot" ]]; then
+            printf '%s\n' "${cmd_text}" >> "/dev/shm/mc-bot/${target_bot}.cmd"
+        else
+            printf '%s\n' "${cmd_text}" >> "/dev/shm/mc-bot-${target_bot}.cmd"
+        fi
+        echo "[+] Dispatched order to ${target_bot}: ${cmd_text}"
+    fi
 }
 
 status_bot() {
@@ -1203,11 +1371,14 @@ case "${cmd}" in
                 cmd)
                     remote_cmd_squad "$@"
                     ;;
+                repl)
+                    remote_squad_repl
+                    ;;
                 log|logs)
                     remote_log_squad "$@"
                     ;;
                 *)
-                    echo "Usage: mc-bot --remote squad [start|stop|status|cmd|log] [args...]" >&2
+                    echo "Usage: mc-bot --remote squad [start|stop|status|cmd|repl|log] [args...]" >&2
                     exit 1
                     ;;
             esac
@@ -1225,12 +1396,31 @@ case "${cmd}" in
                 cmd)
                     cmd_squad "$@"
                     ;;
+                repl)
+                    squad_repl
+                    ;;
                 *)
-                    echo "Usage: mc-bot squad [start|stop|status|cmd] [args...]" >&2
+                    echo "Usage: mc-bot squad [start|stop|status|cmd|repl] [args...]" >&2
                     exit 1
                     ;;
             esac
         fi
+        ;;
+    repl)
+        if [[ "${IS_REMOTE}" -eq 1 ]]; then
+            remote_squad_repl
+        else
+            squad_repl
+        fi
+        ;;
+    admin|operator)
+        local target_endpoint="${1:-}"
+        local resolved
+        resolved=$(resolve_endpoint "${target_endpoint}" 0)
+        local host="${resolved%%:*}"
+        local port="${resolved##*:}"
+        echo "[*] Launching Admin/Operator in-game REPL connecting to ${host}:${port}..."
+        node "${SOURCE_BOT_DIR}/src/admin_bot.mjs" "${host}" "${port}" "${2:-Operator}"
         ;;
     monitor)
         if [[ "${IS_REMOTE}" -eq 1 ]]; then
@@ -1242,24 +1432,40 @@ case "${cmd}" in
         ;;
     cmd)
         target_bot=""
-        if [[ $# -ge 2 && -f "${PIDS_DIR}/$1.pid" ]]; then
-            target_bot="$1"
-            shift
+        if [[ $# -ge 2 ]]; then
+            if [[ -f "${PIDS_DIR}/$1.pid" || "$1" =~ ^(Jotaro|Bob|Torin|Arthur|Willow|all)$ || ( ! "$1" =~ ^[!/] && "$1" =~ ^[A-Za-z0-9_]+$ ) ]]; then
+                target_bot="$1"
+                shift
+            fi
         fi
         command_string="$*"
         if [[ -z "${command_string}" ]]; then
-            echo "Error: Command text required, e.g. mc-bot cmd '!status' or mc-bot cmd Rusty '!status'" >&2
+            echo "Error: Command text required, e.g. mc-bot cmd '!status' or mc-bot cmd Bob '!build'" >&2
             exit 1
         fi
-        # ponytail: stream stdin to cat >> to avoid shell expansion vulnerabilities & command loss
-        cmd_dest="/dev/shm/mc-bot.cmd"
-        [[ -n "${target_bot}" ]] && cmd_dest="/dev/shm/mc-bot-${target_bot}.cmd"
+        # ponytail: delegate to remote mc-bot.sh when remote; local writes directly to /dev/shm
         if [[ "${IS_REMOTE}" -eq 1 ]]; then
-            printf '%s\n' "${command_string}" | remote_ssh "cat >> ${cmd_dest}"
+            remote_ssh "${REMOTE_DIR}/mc-bot.sh cmd ${target_bot:-all} '${command_string}'"
             echo "[+] Dispatched command to remote bot on CT 116: ${command_string}"
         else
-            printf '%s\n' "${command_string}" >> "${cmd_dest}"
-            echo "[+] Dispatched command to local bot ${target_bot:-all}: ${command_string}"
+            if [[ -z "${target_bot}" || "${target_bot}" == "all" ]]; then
+                for b in Jotaro Bob Torin Arthur Willow; do
+                    if [[ -d "/dev/shm/mc-bot" ]]; then
+                        printf '%s\n' "${command_string}" >> "/dev/shm/mc-bot/${b}.cmd"
+                    else
+                        printf '%s\n' "${command_string}" >> "/dev/shm/mc-bot-${b}.cmd"
+                    fi
+                done
+                printf '%s\n' "${command_string}" >> "/dev/shm/mc-bot.cmd"
+                echo "[+] Dispatched broadcast command to local bots: ${command_string}"
+            else
+                if [[ -d "/dev/shm/mc-bot" ]]; then
+                    printf '%s\n' "${command_string}" >> "/dev/shm/mc-bot/${target_bot}.cmd"
+                else
+                    printf '%s\n' "${command_string}" >> "/dev/shm/mc-bot-${target_bot}.cmd"
+                fi
+                echo "[+] Dispatched command to local bot '${target_bot}': ${command_string}"
+            fi
         fi
         ;;
     probe|discover)

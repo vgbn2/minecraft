@@ -7,9 +7,35 @@ export class IpcManager {
     this.onCommand = onCommand
     this.cmdFiles = [
       `/dev/shm/mc-bot-${this.username}.cmd`,
+      `/dev/shm/mc-bot/${this.username}.cmd`,
+      `/dev/shm/mc-bot/all.cmd`,
       process.env.MC_CMD_FILE || `/dev/shm/mc-bot.cmd`
     ]
     this.interval = null
+  }
+
+  static dispatchCommand(targetBot, command) {
+    if (!targetBot || !command) return false
+    const targets = targetBot.toLowerCase() === 'all'
+      ? ['Jotaro', 'Bob', 'Torin', 'Arthur', 'Willow']
+      : [targetBot]
+
+    for (const b of targets) {
+      let cmdPath = `/dev/shm/mc-bot/${b}.cmd`
+      try {
+        if (!fs.existsSync('/dev/shm/mc-bot')) {
+          fs.mkdirSync('/dev/shm/mc-bot', { recursive: true })
+        }
+      } catch {
+        cmdPath = `/dev/shm/mc-bot-${b}.cmd`
+      }
+      try {
+        fs.appendFileSync(cmdPath, `${command.trim()}\n`, 'utf8')
+      } catch {
+        try { fs.appendFileSync(`/dev/shm/mc-bot-${b}.cmd`, `${command.trim()}\n`, 'utf8') } catch {}
+      }
+    }
+    return true
   }
 
   start() {
