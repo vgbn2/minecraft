@@ -10,7 +10,7 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "test": "node tests/auto_eat.test.mjs && node tests/test-verify.mjs && node tests/test_incentive_engine.mjs && node tests/test_admin_ipc.mjs && node tests/test_player_registry.mjs && node tests/test_squad_jojo.mjs && node tests/test_motion_watchdog.mjs && node tests/test_agriculture_tech.mjs && node tests/test_architecture_20x20.mjs && node tests/test_logistics_depot.mjs && node tests/test_hybrid_path.mjs",
+    "test": "node tests/auto_eat.test.mjs && node tests/test-verify.mjs && node tests/test_incentive_engine.mjs && node tests/test_admin_ipc.mjs && node tests/test_player_registry.mjs && node tests/test_squad_jojo.mjs && node tests/test_motion_watchdog.mjs && node tests/test_agriculture_tech.mjs && node tests/test_architecture_20x20.mjs && node tests/test_logistics_depot.mjs && node tests/test_hybrid_path.mjs && node tests/test_nlp_translator.mjs",
     "audit:security": "node ../tools/audit-security.mjs"
   },
   "dependencies": {

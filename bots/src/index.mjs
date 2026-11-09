@@ -638,8 +638,25 @@ export function handleMessage(sender, rawMessage, isWhisper, isIpc = false) {
   const parts = msg.split(/\s+/)
   const firstWord = parts[0].toLowerCase()
 
-  handleFastCommand(sender, firstWord, parts.slice(1), isWhisper).then(handled => {
+  handleFastCommand(sender, firstWord, parts.slice(1), isWhisper).then(async handled => {
     if (handled) return
+    const translated = supervisor.translateNaturalLanguage(sender, msg)
+    if (translated.some(a => a.intent !== 'UNKNOWN')) {
+      for (const action of translated) {
+        if (action.intent === 'UNKNOWN') continue
+        const targetLower = action.targetAgent.toLowerCase()
+        if (targetLower === botName.toLowerCase() || targetLower === 'all') {
+          const cleanCmd = action.command.replace(/^[!/]/, '').trim()
+          const cmdParts = cleanCmd.split(/\s+/)
+          await handleFastCommand(sender, cmdParts[0].toLowerCase(), cmdParts.slice(1), isWhisper)
+        }
+        if (targetLower !== botName.toLowerCase()) {
+          IpcManager.dispatchCommand(action.targetAgent, action.command)
+          sendResponse(sender, action.tacticalBrief, isWhisper)
+        }
+      }
+      return
+    }
     aiAgent.query(sender, msg, isWhisper)
   }).catch(err => {
     console.error('[!] Error in handleFastCommand:', err)

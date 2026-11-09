@@ -207,11 +207,8 @@ export class AIAgent {
         const brief = args.tactical_brief || 'Tactical order'
         console.log(`[ORCHESTRATOR] ${this.personality.name || this.bot.username} delegating to ${targetAgent}: "${cmd}" (${brief})`)
         this.sendResponse(sender, `[Order] @${targetAgent} ${cmd} (${brief})`, isWhisper)
-        try {
-          const destIpc = `/dev/shm/mc-bot-${targetAgent}.cmd`
-          fs.appendFileSync(destIpc, `${cmd}\n`)
-        } catch (err) {
-          console.error(`[!] Failed to route delegated task to ${targetAgent}: ${err.message}`)
+        if (!IpcManager.dispatchCommand(targetAgent, cmd)) {
+          console.error(`[!] Failed to route delegated task to ${targetAgent}`)
         }
         break
       }

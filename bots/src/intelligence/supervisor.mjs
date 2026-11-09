@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { Vec3 } from 'vec3'
+import { NlpTranslationLayer } from './nlp_translator.mjs'
 
 // ponytail: immutable unbreakable blocks set; prevents infinite dig loops on survival-immune blocks
 export const UNBREAKABLE_BLOCKS = new Set([
@@ -173,9 +174,17 @@ export class PrompterSupervisor {
   constructor(options = {}) {
     this.memoryPath = options.memoryPath || '/opt/mc-bot/memory.json'
     this.waypointGraph = options.waypointGraph || new WaypointGraph(this.memoryPath)
+    this.nlpTranslator = options.nlpTranslator || new NlpTranslationLayer({
+      landmarks: this.waypointGraph.listWaypoints()
+    })
     this.status = 'IDLE' // IDLE | PLANNING | EXECUTING | ABORTED
     this.activeTask = null
     this.taskQueue = []
+  }
+
+  translateNaturalLanguage(sender, rawText, context = {}) {
+    this.nlpTranslator.landmarks = this.waypointGraph.listWaypoints()
+    return this.nlpTranslator.translate(sender, rawText, context)
   }
 
   parseMacroIntent(sender, command, args, context = {}) {
