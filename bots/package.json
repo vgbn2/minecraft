@@ -10,7 +10,7 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "test": "node tests/test-verify.mjs",
+    "test": "node tests/auto_eat.test.mjs && node tests/test-verify.mjs",
     "audit:security": "node ../tools/audit-security.mjs"
   },
   "dependencies": {

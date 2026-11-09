@@ -8,7 +8,7 @@ import protocolPkg from 'minecraft-protocol'
 import mcData from 'minecraft-data'
 import pathfinderPkg from 'mineflayer-pathfinder'
 import collectBlockPkg from 'mineflayer-collectblock'
-import autoEatPkg from 'mineflayer-auto-eat'
+import * as autoEatPkg from 'mineflayer-auto-eat'
 import armorManagerPkg from 'mineflayer-armor-manager'
 import pvpPkg from 'mineflayer-pvp'
 
@@ -129,7 +129,7 @@ console.log('\n--- Gate 3: Plugin Initialization & Movements ---')
 runTest('Plugin loading on bot instance', () => {
   const { pathfinder, Movements } = pathfinderPkg
   const collectBlockPlugin = collectBlockPkg.plugin || collectBlockPkg
-  const autoEatPlugin = autoEatPkg.plugin || autoEatPkg
+  const autoEatPlugin = autoEatPkg.loader || autoEatPkg.plugin || autoEatPkg.default?.plugin || autoEatPkg.default?.loader || autoEatPkg.default
   const armorManagerPlugin = armorManagerPkg.default || armorManagerPkg
   const pvpPlugin = pvpPkg.plugin || pvpPkg
 
@@ -141,7 +141,16 @@ runTest('Plugin loading on bot instance', () => {
   bot.entities = {}
   bot.inventory = { items: () => [], slots: [] }
   bot.supportFeature = () => false
-  bot.loadPlugin = (plugin) => plugin(bot)
+  const _plugins = new Set()
+  bot.hasPlugin = (plugin) => _plugins.has(plugin)
+  bot.loadPlugin = (plugin) => {
+    const fn = plugin?.default || plugin
+    if (typeof fn === 'function') {
+      if (_plugins.has(fn)) return
+      _plugins.add(fn)
+      fn(bot)
+    }
+  }
 
   bot.loadPlugin(pathfinder)
   bot.loadPlugin(collectBlockPlugin)

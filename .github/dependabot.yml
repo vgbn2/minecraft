@@ -9,6 +9,8 @@ updates:
     ignore:
       - dependency-name: "mineflayer"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "mineflayer-auto-eat"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "vec3"
         update-types: ["version-update:semver-major"]
     groups:

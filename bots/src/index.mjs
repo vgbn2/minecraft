@@ -391,8 +391,14 @@ bot.once('spawn', () => {
   console.log(`[+] Bot '${username}' [${personality.title}] (Stand: ${personality.stand}) successfully spawned in world at (${p.x}, ${p.y}, ${p.z})`)
   console.log(`\n=== JOJO STAND PARAMETERS ===\n${formatJojoCard(personality)}\n=============================\n`)
   try {
-    bot.autoEat.options.priority = 'foodPoints'
-    bot.autoEat.options.bannedFood = ['rotten_flesh', 'poisonous_potato', 'pufferfish', 'spider_eye']
+    if (bot.autoEat) {
+      const opts = bot.autoEat.opts || bot.autoEat.options || {}
+      opts.priority = 'foodPoints'
+      opts.bannedFood = ['rotten_flesh', 'poisonous_potato', 'pufferfish', 'spider_eye']
+      if (typeof bot.autoEat.setOpts === 'function') {
+        bot.autoEat.setOpts({ priority: 'foodPoints', bannedFood: opts.bannedFood })
+      }
+    }
   } catch {}
 })
 

@@ -2,7 +2,7 @@
 import { createRequire } from 'node:module'
 import mineflayer from 'mineflayer'
 import armorManager from 'mineflayer-armor-manager'
-import autoEatPkg from 'mineflayer-auto-eat'
+import * as autoEatPkg from 'mineflayer-auto-eat'
 import collectBlockPkg from 'mineflayer-collectblock'
 import pathfinderPkg from 'mineflayer-pathfinder'
 import pvpPkg from 'mineflayer-pvp'
@@ -39,7 +39,7 @@ try {
   if (_req.cache[pChatPath]) _req.cache[pChatPath].exports = wrapPChat
 } catch {}
 
-const autoEat = autoEatPkg.plugin || autoEatPkg.default || autoEatPkg
+const autoEat = autoEatPkg.loader || autoEatPkg.plugin || autoEatPkg.default?.plugin || autoEatPkg.default?.loader || autoEatPkg.default
 const collectBlock = collectBlockPkg.plugin || collectBlockPkg.default || collectBlockPkg
 const pathfinder = pathfinderPkg.pathfinder || pathfinderPkg
 const pvp = pvpPkg.plugin || pvpPkg

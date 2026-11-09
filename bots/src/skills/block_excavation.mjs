@@ -31,7 +31,7 @@ export async function executeDeconstruction(bot, plan, sender, isWhisper, sendRe
     sendResponse(sender, 'Inventory full! Drop items before clearing.', isWhisper)
     return
   }
-  bot.autoEat?.disable()
+  bot.autoEat?.disable?.() || bot.autoEat?.disableAuto?.()
   let clearedCount = 0
 
   try {
@@ -64,7 +64,7 @@ export async function executeDeconstruction(bot, plan, sender, isWhisper, sendRe
       }
     }
   } finally {
-    bot.autoEat?.enable()
+    bot.autoEat?.enable?.() || bot.autoEat?.enableAuto?.()
   }
 
   sendResponse(sender, `Excavation complete! Cleared ${clearedCount} block(s).`, isWhisper)
