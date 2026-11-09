@@ -1,5 +1,6 @@
 // Intermediate NLP Translation Compiler: Human Speech -> Crusader Agent Prompts
-// Bilingual (EN/VN) lemma parser with deterministic spatial extraction and persona routing.
+// Data-driven modular locale parser with deterministic spatial extraction and persona routing.
+import { getDefaultLocaleLanguageLoader } from '../core/locale_language_loader.mjs'
 
 export const ROLE_AGENT_MAP = {
   mastermind: 'Jotaro',
@@ -18,33 +19,32 @@ export const ROLE_AGENT_MAP = {
 
 export const CRUSADER_NAMES = ['Jotaro', 'Joseph', 'Polnareff', 'Avdol', 'Kakyoin', 'Iggy']
 
-// Vietnamese and English item dictionary normalization
-export const ITEM_ALIAS_MAP = {
-  // Ores & Rocks
-  'sắt': 'iron_ore',
-  'iron': 'iron_ore',
-  'than': 'coal_ore',
-  'coal': 'coal_ore',
-  'vàng': 'gold_ore',
-  'gold': 'gold_ore',
-  'kim cương': 'diamond',
-  'diamond': 'diamond',
-  'đá': 'stone',
-  'stone': 'stone',
-  'đá cuội': 'cobblestone',
-  'cobble': 'cobblestone',
-  'cobblestone': 'cobblestone',
-  'đất': 'dirt',
-  'dirt': 'dirt',
-  'cát': 'sand',
-  'sand': 'sand',
-  'gỗ': 'oak_log',
-  'wood': 'oak_log',
-  'log': 'oak_log',
-  'lúa': 'wheat',
-  'wheat': 'wheat',
-  'bánh mì': 'bread',
-  'bread': 'bread'
+// Dynamic item alias map proxy for backwards compatibility
+export const ITEM_ALIAS_MAP = new Proxy({}, {
+  get(_, prop) {
+    const bundle = getDefaultLocaleLanguageLoader().getActiveBundle()
+    return bundle.items[prop]
+  },
+  has(_, prop) {
+    const bundle = getDefaultLocaleLanguageLoader().getActiveBundle()
+    return prop in bundle.items
+  },
+  ownKeys() {
+    const bundle = getDefaultLocaleLanguageLoader().getActiveBundle()
+    return Object.keys(bundle.items)
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    const bundle = getDefaultLocaleLanguageLoader().getActiveBundle()
+    if (prop in bundle.items) {
+      return { configurable: true, enumerable: true, value: bundle.items[prop] }
+    }
+    return undefined
+  }
+})
+
+function renderTemplate(template, vars = {}) {
+  if (!template) return ''
+  return template.replace(/\{(\w+)\}/g, (match, key) => (vars[key] !== undefined ? vars[key] : match))
 }
 
 export class NlpTranslationLayer {
@@ -52,10 +52,19 @@ export class NlpTranslationLayer {
     this.landmarks = options.landmarks || {}
     this.apiBase = options.apiBase || 'http://127.0.0.1:20128/v1'
     this.model = options.model || 'ag/gemini-3.8-flash'
+    this.localeLoader = options.localeLoader || getDefaultLocaleLanguageLoader()
+    this.language = options.language || 'auto'
+    this.setLanguage(this.language)
+  }
+
+  setLanguage(lang = 'auto') {
+    this.language = lang
+    this.bundle = this.localeLoader.setLanguage(lang)
+    return this.bundle
   }
 
   /**
-   * Translates unstructured speech (English or Vietnamese) into structured Crusader orders.
+   * Translates unstructured speech (any configured locale) into structured Crusader orders.
    * Cap input length at 256 characters (Netty frame ceiling) and strip control characters.
    */
   translate(speaker, rawText, context = {}) {
@@ -67,7 +76,7 @@ export class NlpTranslationLayer {
 
     if (!cleanText) return []
 
-    // 1. Multi-clause splitter ("and", "then", ";", "và", "rồi", ", sau đó", "after that")
+    // 1. Multi-clause splitter using data-driven delimiters
     const clauses = this._splitClauses(cleanText)
     const actions = []
 
@@ -82,13 +91,13 @@ export class NlpTranslationLayer {
   }
 
   _splitClauses(text) {
-    // Split on multi-goal delimiters: "and", "then", ";", "và", "rồi", "sau đó", etc.
-    const splitRegex = /\s*(?:;\s*|(?<=^|\s)(?:and|then|va|và|rồi|sau đó|after that|next)(?=$|\s))\s*/giu
+    const splitRegex = this.bundle.splitRegex
     return text.split(splitRegex).map(c => c.trim()).filter(Boolean)
   }
 
   _parseClause(speaker, clause, context = {}) {
     const lower = clause.toLowerCase()
+    const { intentRegexes, structureRegexes, materialRegexes, templates } = this.bundle
 
     // 1. Target Crusader resolution
     let target = this._resolveTargetAgent(lower)
@@ -96,66 +105,74 @@ export class NlpTranslationLayer {
     // 2. Spatial resolution (coordinates or named landmark)
     const coords = this._extractCoordinates(clause)
     const landmark = this._extractLandmark(lower)
-    const targetPos = coords || (landmark ? this.landmarks[landmark] : null)
+    const targetPos = coords || (landmark ? (this.landmarks[landmark] || this.bundle.landmarks[landmark]) : null)
 
     // 3. Lemma Intent Classification
     let intent = 'UNKNOWN'
     let command = ''
     let tacticalBrief = ''
 
-    if (/(?:^|[^\p{L}\p{N}])(?:mine|dig|quarry|excavate|đào|khai thác)(?=$|[^\p{L}\p{N}])/iu.test(lower)) {
+    if (intentRegexes.MINE && intentRegexes.MINE.test(lower)) {
       intent = 'MINE'
       if (!target) target = 'Polnareff'
       const { item, count } = this._extractItemAndCount(lower, 'stone', 10)
       command = `!mine ${item} ${count}`
-      tacticalBrief = `[Stand Order: Silver Chariot] ${target}, excavate ${count} ${item}.`
-    } else if (/(?:^|[^\p{L}\p{N}])(?:build|place|construct|xây|dựng|làm nhà|đặt)(?=$|[^\p{L}\p{N}])/iu.test(lower)) {
+      tacticalBrief = renderTemplate(templates.MINE, { target, item, count })
+    } else if (intentRegexes.BUILD && intentRegexes.BUILD.test(lower)) {
       intent = 'BUILD'
       if (!target) target = 'Joseph'
-      const structure = /(?:^|[^\p{L}\p{N}])(?:shelter|house|tường|nhà|căn cứ|base)(?=$|[^\p{L}\p{N}])/iu.test(lower) && !/(?:^|[^\p{L}\p{N}])(?:wall|tường)(?=$|[^\p{L}\p{N}])/iu.test(lower) ? 'shelter' : 'wall'
-      const material = /(?:^|[^\p{L}\p{N}])(?:dirt|đất)(?=$|[^\p{L}\p{N}])/iu.test(lower) ? 'dirt' : (/(?:^|[^\p{L}\p{N}])(?:stone|đá)(?=$|[^\p{L}\p{N}])/iu.test(lower) && !lower.includes('đá cuội') && !lower.includes('cobble') ? 'stone' : 'cobblestone')
+      const isShelter = structureRegexes.shelter && structureRegexes.shelter.test(lower) &&
+        (!structureRegexes.wall || !structureRegexes.wall.test(lower))
+      const structure = isShelter ? 'shelter' : 'wall'
+
+      let material = 'cobblestone'
+      if (materialRegexes.dirt && materialRegexes.dirt.test(lower)) {
+        material = 'dirt'
+      } else if (materialRegexes.stone && materialRegexes.stone.test(lower) && !lower.includes('cobble') && !lower.includes('đá cuội')) {
+        material = 'stone'
+      }
       command = `!build ${structure} ${material}`
-      tacticalBrief = `[Stand Order: Hermit Purple] ${target}, construct ${structure} using ${material}.`
-    } else if (/(?:^|[^\p{L}\p{N}])(?:guard|defend|protect|sentry|patrol|kill|attack|bảo vệ|canh gác|tuần tra|đánh|tiêu diệt)(?=$|[^\p{L}\p{N}])/iu.test(lower)) {
+      tacticalBrief = renderTemplate(templates.BUILD, { target, structure, material })
+    } else if (intentRegexes.GUARD && intentRegexes.GUARD.test(lower)) {
       intent = 'GUARD'
       if (!target) target = 'Avdol'
       command = '!patrol'
-      tacticalBrief = `[Stand Order: Magician's Red] ${target}, secure defensive perimeter and neutralize threats.`
-    } else if (/(?:^|[^\p{L}\p{N}])(?:harvest|farm|crop|feed|gather|log|wood|thu hoạch|trồng|chăn nuôi|chặt gỗ)(?=$|[^\p{L}\p{N}])/iu.test(lower)) {
+      tacticalBrief = renderTemplate(templates.GUARD, { target })
+    } else if (intentRegexes.HARVEST && intentRegexes.HARVEST.test(lower)) {
       intent = 'HARVEST'
       if (!target) target = 'Kakyoin'
       command = '!harvest'
-      tacticalBrief = `[Stand Order: Hierophant Green] ${target}, harvest crops and timber reserves.`
-    } else if (/(?:^|[^\p{L}\p{N}])(?:scout|explore|recon|thám hiểm|do thám|trinh sát)(?=$|[^\p{L}\p{N}])/iu.test(lower)) {
+      tacticalBrief = renderTemplate(templates.HARVEST, { target })
+    } else if (intentRegexes.SCOUT && intentRegexes.SCOUT.test(lower)) {
       intent = 'SCOUT'
       if (!target) target = 'Iggy'
       command = '!survey'
-      tacticalBrief = `[Stand Order: The Fool] ${target}, scout terrain and alert squad of hazards.`
-    } else if (/(?:^|[^\p{L}\p{N}])(?:come|here|lại đây|tới đây|ở đây|theo|follow)(?=$|[^\p{L}\p{N}])/iu.test(lower)) {
+      tacticalBrief = renderTemplate(templates.SCOUT, { target })
+    } else if (intentRegexes.COME && intentRegexes.COME.test(lower)) {
       intent = 'NAVIGATE'
       if (!target) target = 'Jotaro'
       command = '!come'
-      tacticalBrief = `${target}, assemble near ${speaker}.`
-    } else if (/(?:^|[^\p{L}\p{N}])(?:goto|go to|walk to|move to|đi tới|đi đến)(?=$|[^\p{L}\p{N}])/iu.test(lower) && targetPos) {
+      tacticalBrief = renderTemplate(templates.COME, { target, speaker })
+    } else if (intentRegexes.GOTO && intentRegexes.GOTO.test(lower) && targetPos) {
       intent = 'NAVIGATE'
       if (!target) target = 'Jotaro'
       command = `!goto ${targetPos.x} ${targetPos.y} ${targetPos.z}`
-      tacticalBrief = `${target}, navigate to (${targetPos.x}, ${targetPos.y}, ${targetPos.z}).`
-    } else if (/(?:^|[^\p{L}\p{N}])(?:stop|stay|halt|dừng|đứng yên)(?=$|[^\p{L}\p{N}])/iu.test(lower)) {
+      tacticalBrief = renderTemplate(templates.GOTO, { target, x: targetPos.x, y: targetPos.y, z: targetPos.z })
+    } else if (intentRegexes.STOP && intentRegexes.STOP.test(lower)) {
       intent = 'STOP'
       if (!target) target = 'all'
       command = '!stop'
-      tacticalBrief = 'Emergency halt all active tasks.'
-    } else if (/(?:^|[^\p{L}\p{N}])(?:status|report|tình trạng|báo cáo)(?=$|[^\p{L}\p{N}])/iu.test(lower)) {
+      tacticalBrief = renderTemplate(templates.STOP, { target })
+    } else if (intentRegexes.STATUS && intentRegexes.STATUS.test(lower)) {
       intent = 'STATUS'
       if (!target) target = 'all'
       command = '!status'
-      tacticalBrief = 'Query vitals and squad status.'
+      tacticalBrief = renderTemplate(templates.STATUS, { target })
     } else {
       // Default fallback routing to Commander Jotaro
       if (!target) target = 'Jotaro'
       command = `!chat ${clause}`
-      tacticalBrief = `Jotaro: Analyze order '${clause}'.`
+      tacticalBrief = renderTemplate(templates.CHAT, { target, clause })
     }
 
     return {
@@ -170,15 +187,12 @@ export class NlpTranslationLayer {
   }
 
   _resolveTargetAgent(lower) {
-    // Check explicit Crusader names
     for (const name of CRUSADER_NAMES) {
       const re = new RegExp(`\\b${name.toLowerCase()}\\b`, 'i')
       if (re.test(lower)) return name
     }
-    // Avdol typo alias
     if (/\bavodl\b/i.test(lower)) return 'Avdol'
 
-    // Check roles
     for (const [role, agent] of Object.entries(ROLE_AGENT_MAP)) {
       const re = new RegExp(`\\b${role}\\b`, 'i')
       if (re.test(lower)) return agent
@@ -187,7 +201,6 @@ export class NlpTranslationLayer {
   }
 
   _extractCoordinates(text) {
-    // Matches: 100 64 -200 or at 100, 64, -200 or x=100 y=64 z=-200
     const m = text.match(/(?:at\s+|pos\s+)?(-?\d+)[,\s]+(\d+)[,\s]+(-?\d+)/)
     if (m) {
       const x = parseInt(m[1], 10)
@@ -201,11 +214,10 @@ export class NlpTranslationLayer {
   }
 
   _extractLandmark(lower) {
-    const landmarks = ['base', 'farm', 'mine', 'depot', 'quarry', 'home', 'house', 'căn cứ', 'nhà']
-    for (const lm of landmarks) {
-      if (lower.includes(lm)) {
-        if (lm === 'căn cứ' || lm === 'nhà' || lm === 'home') return 'base'
-        return lm
+    const landmarks = this.bundle.landmarks
+    for (const [alias, canonical] of Object.entries(landmarks)) {
+      if (lower.includes(alias)) {
+        return canonical
       }
     }
     return null
@@ -219,7 +231,8 @@ export class NlpTranslationLayer {
     }
 
     let item = defaultItem
-    for (const [alias, canonical] of Object.entries(ITEM_ALIAS_MAP)) {
+    const items = this.bundle.items
+    for (const [alias, canonical] of Object.entries(items)) {
       const re = new RegExp(`(?:^|[^\\p{L}\\p{N}])${alias}(?=$|[^\\p{L}\\p{N}])`, 'iu')
       if (re.test(lower)) {
         item = canonical

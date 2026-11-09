@@ -37,6 +37,7 @@ ensure_config() {
   "api_base": "http://127.0.0.1:20128/v1",
   "api_key": "",
   "model": "ag/gemini-3.8-flash",
+  "language": "auto",
   "max_distance": 64,
   "view_distance": 5
 }
@@ -69,6 +70,9 @@ ensure_dependencies() {
     fi
     if [[ -d "${SOURCE_BOT_DIR}/config" ]]; then
         cp -r "${SOURCE_BOT_DIR}/config" "${DATA_DIR}/"
+    fi
+    if [[ -d "${SOURCE_BOT_DIR}/locales" ]]; then
+        cp -r "${SOURCE_BOT_DIR}/locales" "${DATA_DIR}/"
     fi
     cp "${SOURCE_BOT_DIR}"/*.mjs "${DATA_DIR}/" 2>/dev/null || true
     if [[ -f "${SOURCE_BOT_DIR}/package.json" ]]; then
@@ -141,6 +145,12 @@ configure_bot() {
                 sed -i -E "s/\"api_key\":\s*\"[^\"]*\"/\"api_key\": \"${okey}\"/" "${CONFIG_FILE}"
                 echo "[+] Switched provider to official OpenAI (gpt-4o-mini)"
                 ;;
+            --lang|--language)
+                shift
+                local slang="$1"
+                python3 -B -c "import json; p='${CONFIG_FILE}'; d=json.load(open(p)); d['language']='${slang}'; json.dump(d, open(p, 'w'), indent=2)" 2>/dev/null || true
+                echo "[+] Updated NLP language pack to '${slang}' in ${CONFIG_FILE}"
+                ;;
             *)
                 echo "Unknown config flag: $1" >&2
                 return 1
@@ -185,9 +195,11 @@ AI Configuration:
   config --api-key <key>                    Set custom API key
   config --api-base <url>                   Set custom OpenAI-compatible endpoint
   config --model <model>                    Set model (e.g. ag/gemini-3.8-flash)
+  config --lang <code>                      Set NLP language pack (auto, en, vi, ja)
   config --9router                          Switch to local 9Router (ag/gemini-3.8-flash)
   config --ollama                           Switch to local Ollama (qwen2.5-coder:7b)
   config --openai <key>                     Switch to official OpenAI (gpt-4o-mini)
+  lang [code]                               Display or set active NLP language pack
 
 Personalities: (JoJo Stand Archetypes)
   commander    Squad Mastermind (Jotaro) - Star Platinum [A/A/C/A/A/A]: tactical orchestrator

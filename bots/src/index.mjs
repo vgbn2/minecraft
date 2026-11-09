@@ -42,6 +42,7 @@ const defaults = {
   api_base: process.env.MC_API_BASE || 'http://127.0.0.1:20128/v1',
   api_key: process.env.MC_API_KEY || '',
   model: 'ag/gemini-3.8-flash',
+  language: process.env.MC_LANGUAGE || 'auto',
   max_distance: 96,
   view_distance: 6
 }
@@ -54,6 +55,7 @@ const dataConfig = loadJson(path.join(process.env.HOME || '.', '.local/share/mc-
 export const config = { ...defaults, ...defaultConfig, ...dataConfig }
 if (process.env.MC_API_BASE) config.api_base = process.env.MC_API_BASE
 if (process.env.MC_API_KEY) config.api_key = process.env.MC_API_KEY
+if (process.env.MC_LANGUAGE) config.language = process.env.MC_LANGUAGE
 
 if (!config.api_key) {
   config.api_key = process.env.OPENAI_API_KEY || ''
@@ -106,7 +108,7 @@ export const bot = createBotInstance({
 export const escapeExcavator = new TacticalEscapeExcavator(bot)
 export const safeNav = new SafeHopNavigator(bot, { maxHopDistance: 24, excavator: escapeExcavator })
 export const combatEvasion = new CombatEvasionController(bot)
-export const supervisor = new PrompterSupervisor(bot)
+export const supervisor = new PrompterSupervisor({ bot, language: config.language || 'auto' })
 export const watchdog = new MotionWatchdog(bot, {
   idleThresholdSec: 12,
   onAlert: (msg, status) => {
@@ -475,6 +477,18 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
     }
     case 'squad': {
       sendResponse(sender, `SQUAD: ${formatSquadMatrix(PERSONALITIES)}`, isWhisper)
+      return true
+    }
+    case 'lang':
+    case 'language': {
+      const targetLang = (args[0] || '').toLowerCase()
+      if (!targetLang || targetLang === 'status') {
+        const available = supervisor.nlpTranslator.localeLoader.getAvailableLanguages().join(', ')
+        sendResponse(sender, `Current NLP language: '${supervisor.nlpTranslator.language}'. Available locales: [auto, ${available}]`, isWhisper)
+        return true
+      }
+      supervisor.setLanguage(targetLang)
+      sendResponse(sender, `Switched NLP language pack to '${targetLang}'`, isWhisper)
       return true
     }
     case 'inspect': {

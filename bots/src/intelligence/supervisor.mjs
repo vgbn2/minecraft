@@ -172,14 +172,21 @@ export function generateDeconstructionPlan(origin, radius = 3, height = 3, depth
  */
 export class PrompterSupervisor {
   constructor(options = {}) {
-    this.memoryPath = options.memoryPath || '/opt/mc-bot/memory.json'
-    this.waypointGraph = options.waypointGraph || new WaypointGraph(this.memoryPath)
-    this.nlpTranslator = options.nlpTranslator || new NlpTranslationLayer({
-      landmarks: this.waypointGraph.listWaypoints()
+    const opts = (options && !options.on) ? options : { bot: options }
+    this.bot = opts.bot || null
+    this.memoryPath = opts.memoryPath || '/opt/mc-bot/memory.json'
+    this.waypointGraph = opts.waypointGraph || new WaypointGraph(this.memoryPath)
+    this.nlpTranslator = opts.nlpTranslator || new NlpTranslationLayer({
+      landmarks: this.waypointGraph.listWaypoints(),
+      language: opts.language || 'auto'
     })
     this.status = 'IDLE' // IDLE | PLANNING | EXECUTING | ABORTED
     this.activeTask = null
     this.taskQueue = []
+  }
+
+  setLanguage(lang = 'auto') {
+    return this.nlpTranslator.setLanguage(lang)
   }
 
   translateNaturalLanguage(sender, rawText, context = {}) {

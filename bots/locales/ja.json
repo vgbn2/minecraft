@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "code": "ja",
+    "name": "日本語"
+  },
+  "clauseDelimiters": ["そして", "それから", "あと", "次に"],
+  "intents": {
+    "MINE": ["掘る", "採掘", "掘削"],
+    "BUILD": ["建てる", "建設", "建築", "置く"],
+    "GUARD": ["守る", "警備", "巡回", "防衛", "倒す", "攻撃"],
+    "HARVEST": ["収穫", "伐採", "集める", "育てる"],
+    "SCOUT": ["偵察", "探索", "調査"],
+    "COME": ["おいで", "こっち", "ついてきて", "集合"],
+    "GOTO": ["行く", "向かう", "移動"],
+    "STOP": ["止まれ", "待て", "停止"],
+    "STATUS": ["状態", "報告", "ステータス"]
+  },
+  "structures": {
+    "shelter": ["家", "拠点", "シェルター"],
+    "wall": ["壁", "防壁", "柵"]
+  },
+  "materials": {
+    "dirt": ["土"],
+    "stone": ["石"],
+    "cobblestone": ["丸石"]
+  },
+  "items": {
+    "鉄": "iron_ore",
+    "石炭": "coal_ore",
+    "金": "gold_ore",
+    "ダイヤ": "diamond",
+    "ダイヤモンド": "diamond",
+    "石": "stone",
+    "丸石": "cobblestone",
+    "土": "dirt",
+    "砂": "sand",
+    "原木": "oak_log",
+    "木": "oak_log",
+    "小麦": "wheat",
+    "パン": "bread"
+  },
+  "landmarks": {
+    "拠点": "base",
+    "家": "base",
+    "農場": "farm",
+    "鉱山": "mine",
+    "倉庫": "depot"
+  },
+  "templates": {
+    "MINE": "[スタンド命令: 銀の戦車] {target}、{count}個の{item}を採掘せよ。",
+    "BUILD": "[スタンド命令: 隠者の紫] {target}、{material}で{structure}を建設せよ。",
+    "GUARD": "[スタンド命令: 魔術師の赤] {target}、防衛ラインを死守し脅威を排除せよ。",
+    "HARVEST": "[スタンド命令: 法皇の緑] {target}、作物を収穫し木材を確保せよ。",
+    "SCOUT": "[スタンド命令: 愚者] {target}、周囲を偵察し危険を警戒せよ。",
+    "COME": "{target}、{speaker}の元へ集結せよ。",
+    "GOTO": "{target}、座標 ({x}, {y}, {z}) へ移動せよ。",
+    "STOP": "全スタンド活動を緊急停止せよ。",
+    "STATUS": "バイタルおよび部隊状況を報告せよ。",
+    "CHAT": "承太郎: 指示「{clause}」を分析する。"
+  }
+}

@@ -22,6 +22,11 @@ ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --lang|--language)
+            shift
+            configure_bot --lang "$1"
+            shift
+            ;;
         --remote|remote)
             IS_REMOTE=1
             shift
@@ -52,7 +57,11 @@ for arg in "$@"; do
         REMAINING_ARGS+=("${arg}")
     fi
 done
-set -- "${REMAINING_ARGS[@]:-}"
+if [[ ${#REMAINING_ARGS[@]} -gt 0 ]]; then
+    set -- "${REMAINING_ARGS[@]}"
+else
+    set --
+fi
 
 case "${cmd}" in
     start)
@@ -134,6 +143,14 @@ case "${cmd}" in
         ;;
     config)
         configure_bot "$@"
+        ;;
+    lang|language)
+        if [[ -z "${1:-}" ]]; then
+            echo "Current mc-bot language pack:"
+            python3 -B -c "import json; d=json.load(open('${CONFIG_FILE}')); print(d.get('language', 'auto'))" 2>/dev/null || echo "auto"
+        else
+            configure_bot --lang "$1"
+        fi
         ;;
     package|release)
         package_bot_release "$@"

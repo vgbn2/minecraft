@@ -32,6 +32,7 @@ remote_sync_bot() {
         SSH_AUTH_SOCK="${auth_sock}" scp -rq \
             "${SOURCE_BOT_DIR}/src" \
             "${SOURCE_BOT_DIR}/config" \
+            "${SOURCE_BOT_DIR}/locales" \
             "${SOURCE_BOT_DIR}/tests" \
             "${SOURCE_BOT_DIR}/lib" \
             "${SOURCE_BOT_DIR}/scripts" \
@@ -40,7 +41,7 @@ remote_sync_bot() {
             "${SOURCE_BOT_DIR}/package.json" \
             "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/" 2>/dev/null || true
     else
-        (cd "${SOURCE_BOT_DIR}" && tar -czf - bin src config tests lib scripts mc_path_core/src mc_path_core/Cargo.toml *.mjs mc-bot.sh package.json 2>/dev/null) | \
+        (cd "${SOURCE_BOT_DIR}" && tar -czf - bin src config locales tests lib scripts mc_path_core/src mc_path_core/Cargo.toml *.mjs mc-bot.sh package.json 2>/dev/null) | \
             ssh -o BatchMode=yes root@100.120.66.1 "ssh -o BatchMode=yes root@${REMOTE_HOST} 'tar -xzf - -C ${REMOTE_DIR}/'"
     fi
     echo "[+] Synced modular bot packages to CT 116."

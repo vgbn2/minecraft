@@ -1,0 +1,66 @@
+{
+  "meta": {
+    "code": "en",
+    "name": "English"
+  },
+  "clauseDelimiters": ["and", "then", "after that", "next"],
+  "intents": {
+    "MINE": ["mine", "dig", "quarry", "excavate"],
+    "BUILD": ["build", "place", "construct"],
+    "GUARD": ["guard", "defend", "protect", "sentry", "patrol", "kill", "attack"],
+    "HARVEST": ["harvest", "farm", "crop", "feed", "gather", "log", "wood"],
+    "SCOUT": ["scout", "explore", "recon"],
+    "COME": ["come", "here", "follow"],
+    "GOTO": ["goto", "go to", "walk to", "move to"],
+    "STOP": ["stop", "stay", "halt"],
+    "STATUS": ["status", "report"]
+  },
+  "structures": {
+    "shelter": ["shelter", "house", "base", "outpost"],
+    "wall": ["wall", "barrier", "fence"]
+  },
+  "materials": {
+    "dirt": ["dirt", "soil"],
+    "stone": ["stone"],
+    "cobblestone": ["cobble", "cobblestone"]
+  },
+  "items": {
+    "iron": "iron_ore",
+    "iron_ore": "iron_ore",
+    "coal": "coal_ore",
+    "coal_ore": "coal_ore",
+    "gold": "gold_ore",
+    "gold_ore": "gold_ore",
+    "diamond": "diamond",
+    "stone": "stone",
+    "cobble": "cobblestone",
+    "cobblestone": "cobblestone",
+    "dirt": "dirt",
+    "sand": "sand",
+    "wood": "oak_log",
+    "log": "oak_log",
+    "wheat": "wheat",
+    "bread": "bread"
+  },
+  "landmarks": {
+    "base": "base",
+    "home": "base",
+    "house": "base",
+    "farm": "farm",
+    "mine": "mine",
+    "depot": "depot",
+    "quarry": "quarry"
+  },
+  "templates": {
+    "MINE": "[Stand Order: Silver Chariot] {target}, excavate {count} {item}.",
+    "BUILD": "[Stand Order: Hermit Purple] {target}, construct {structure} using {material}.",
+    "GUARD": "[Stand Order: Magician's Red] {target}, secure defensive perimeter and neutralize threats.",
+    "HARVEST": "[Stand Order: Hierophant Green] {target}, harvest crops and timber reserves.",
+    "SCOUT": "[Stand Order: The Fool] {target}, scout terrain and alert squad of hazards.",
+    "COME": "{target}, assemble near {speaker}.",
+    "GOTO": "{target}, navigate to ({x}, {y}, {z}).",
+    "STOP": "Emergency halt all active tasks.",
+    "STATUS": "Query vitals and squad status.",
+    "CHAT": "Jotaro: Analyze order '{clause}'."
+  }
+}

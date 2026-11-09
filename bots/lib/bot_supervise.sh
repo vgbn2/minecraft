@@ -73,6 +73,8 @@ start_bot() {
     api_base=$(grep -o '"api_base": *"[^"]*"' "${CONFIG_FILE}" 2>/dev/null | head -n1 | cut -d'"' -f4 || echo "")
     local api_key
     api_key=$(grep -o '"api_key": *"[^"]*"' "${CONFIG_FILE}" 2>/dev/null | head -n1 | cut -d'"' -f4 || echo "")
+    local language
+    language=$(grep -o '"language": *"[^"]*"' "${CONFIG_FILE}" 2>/dev/null | head -n1 | cut -d'"' -f4 || echo "auto")
 
     (
         cd "${DATA_DIR}"
@@ -83,6 +85,7 @@ start_bot() {
         MC_LOG_FILE="${log_file}" \
         MC_API_BASE="${api_base}" \
         MC_API_KEY="${api_key}" \
+        MC_LANGUAGE="${language}" \
         nice -n 10 node --max-old-space-size=512 companion.mjs >> "${log_file}" 2>&1 &
         echo $! > "${pid_file}"
     )
@@ -324,6 +327,7 @@ package_bot_release() {
         bots/lib \
         bots/scripts \
         bots/config \
+        bots/locales \
         bots/assets \
         bots/mc-bot.sh \
         bots/companion.mjs \
