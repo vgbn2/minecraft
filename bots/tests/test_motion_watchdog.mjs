@@ -7,7 +7,7 @@ console.log('[*] Running MotionWatchdog Stationary & AFK Exemption Test Suite...
 
 function createMockBot(initialPos = { x: 100, y: 64, z: 200 }) {
   const bot = new EventEmitter()
-  bot.username = 'Bob'
+  bot.username = 'Joseph'
   bot.entity = {
     position: { ...initialPos }
   }
@@ -92,7 +92,7 @@ const advanceSec = (s) => { simulatedTime += s * 1000 }
   assert.strictEqual(st.isAlerting, true, 'Stationary during active task must alert after 10s')
   assert.strictEqual(st.isExempt, false, 'Active task is not exempt')
   assert.strictEqual(alerts.length, 1, 'Alert callback must be triggered')
-  assert.ok(alerts[0].includes('Bob is standing still unexpectedly for 12s'), 'Alert message must specify agent and duration')
+  assert.ok(alerts[0].includes('Joseph is standing still unexpectedly for 12s'), 'Alert message must specify agent and duration')
   assert.ok(alerts[0].includes('mine:iron_ore'), 'Alert message must cite active task')
   console.log('  [PASS] Gate 3: Unexpected stillness during active task triggers alert with task context')
 }
@@ -161,7 +161,7 @@ const advanceSec = (s) => { simulatedTime += s * 1000 }
   watchdog.evaluateCheck()
 
   const q = watchdog.queryStatus()
-  assert.strictEqual(q.username, 'Bob')
+  assert.strictEqual(q.username, 'Joseph')
   assert.strictEqual(q.mode, 'TASK_ACTIVE')
   assert.strictEqual(q.activeTask, 'build:shelter')
   assert.deepStrictEqual(q.position, { x: -240, y: 65, z: 97 })

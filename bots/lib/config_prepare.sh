@@ -191,11 +191,11 @@ AI Configuration:
 
 Personalities: (JoJo Stand Archetypes)
   commander    Squad Mastermind (Jotaro) - Star Platinum [A/A/C/A/A/A]: tactical orchestrator
-  builder      Master architect (Bob) - Crazy Diamond [A/A/D/B/A/C]: shelter & wall construction
-  miner        Dwarven caver (Torin) - Silver Chariot [B/A/C/B/A/C]: underground mining & quarrying
-  guard        Knight sentinel (Arthur) - The World [A/B/B/A/B/B]: perimeter defense & mob attack
-  farmer       Peaceful gatherer (Willow) - Gold Experience [C/A/A/C/A/B]: crop foraging & scouting
-  scout        Field scout (Willow) - Gold Experience [C/A/A/C/A/B]: exploration & supply drops
+  builder      Master architect (Joseph) - Hermit Purple [D/C/A/A/D/E]: defensive & architectural construction
+  miner        Swordsman & miner (Polnareff) - Silver Chariot [B/A/C/B/A/C]: underground excavation & quarrying
+  guard        Pyro-sentinel (Avdol) - Magician's Red [B/B/C/B/C/D]: perimeter defense & mob neutralization
+  farmer       Emerald harvester (Kakyoin) - Hierophant Green [C/B/A/B/C/D]: crop foraging & agricultural supply
+  scout        Desert vanguard (Iggy) - The Fool [B/C/D/C/D/C]: perimeter reconnaissance & terrain scouting
   companion    Balanced loyal companion (default) - Echoes ACT 3 [B/B/B/B/B/B]
 
 Examples:

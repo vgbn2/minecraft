@@ -39,15 +39,15 @@ assert.ok(card.includes('POWER:       [A] ■■■■■'), 'Card must format P
 assert.ok(card.includes('POTENTIAL:   [A] ■■■■■'), 'Card must format Potential A bar')
 
 const chatLine = formatJojoChatLine(personalities.builder)
-assert.ok(chatLine.includes('Crazy Diamond'), 'Chat line must contain Stand name')
-assert.ok(chatLine.includes('Bob'), 'Chat line must contain User name')
+assert.ok(chatLine.includes('Hermit Purple'), 'Chat line must contain Stand name')
+assert.ok(chatLine.includes('Joseph'), 'Chat line must contain User name')
 
 const matrix = formatSquadMatrix(personalities)
 assert.ok(matrix.includes('Jotaro [Star Platinum]'), 'Matrix must list Jotaro')
-assert.ok(matrix.includes('Bob [Crazy Diamond]'), 'Matrix must list Bob')
-assert.ok(matrix.includes('Torin [Silver Chariot]'), 'Matrix must list Torin')
-assert.ok(matrix.includes('Arthur [The World]'), 'Matrix must list Arthur')
-assert.ok(matrix.includes('Willow [Gold Experience]'), 'Matrix must list Willow')
+assert.ok(matrix.includes('Joseph [Hermit Purple]'), 'Matrix must list Joseph')
+assert.ok(matrix.includes('Polnareff [Silver Chariot]'), 'Matrix must list Polnareff')
+assert.ok(matrix.includes('Avdol [Magician\'s Red]'), 'Matrix must list Avdol')
+assert.ok(matrix.includes('Kakyoin [Hierophant Green]'), 'Matrix must list Kakyoin')
 
 // 4. Delegation Tool Schema
 const delegateTool = TOOLS_SCHEMA.find(t => t.function?.name === 'delegate_task')
@@ -61,7 +61,7 @@ assert.deepStrictEqual(
 )
 
 // 5. IPC Delegation Queue Test
-const testAgent = 'Torin'
+const testAgent = 'Polnareff'
 const testIpcFile = `/dev/shm/mc-bot-${testAgent}.cmd`
 try { fs.unlinkSync(testIpcFile) } catch {}
 

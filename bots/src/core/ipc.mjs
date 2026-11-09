@@ -17,7 +17,7 @@ export class IpcManager {
   static dispatchCommand(targetBot, command) {
     if (!targetBot || !command) return false
     const targets = targetBot.toLowerCase() === 'all'
-      ? ['Jotaro', 'Bob', 'Torin', 'Arthur', 'Willow']
+      ? ['Jotaro', 'Joseph', 'Polnareff', 'Avdol', 'Kakyoin', 'Iggy']
       : [targetBot]
 
     for (const b of targets) {

@@ -1,0 +1,66 @@
+{
+  "version": "1.2.0",
+  "series": "JoJo's Bizarre Adventure: Stardust Crusaders (Part 3)",
+  "crusaders": {
+    "Jotaro": {
+      "name": "Jotaro",
+      "stand": "Star Platinum",
+      "role": "commander",
+      "title": "Squad Mastermind",
+      "uuid": "d13eca77-cc84-45fd-b063-c6682aabc733",
+      "skinUrl": "http://textures.minecraft.net/texture/a30322d35683228f30fbca8cd1c2a602087301516f6b438b48d676ee55207570",
+      "skinFile": "assets/skins/Jotaro.png",
+      "stats": { "pwr": "A", "spd": "A", "rng": "C", "dur": "A", "prc": "A", "dev": "A" }
+    },
+    "Joseph": {
+      "name": "Joseph",
+      "stand": "Hermit Purple",
+      "role": "builder",
+      "title": "Master Tactician & Architect",
+      "uuid": "b2265bf6-cb80-48b7-8494-8c8974b37293",
+      "skinUrl": "http://textures.minecraft.net/texture/bbcc5cf7e63645b6dfb751a39bce67234b1d7f1da03e58bfccc3944889756ae0",
+      "skinFile": "assets/skins/Joseph.png",
+      "stats": { "pwr": "D", "spd": "C", "rng": "A", "dur": "A", "prc": "D", "dev": "E" }
+    },
+    "Polnareff": {
+      "name": "Polnareff",
+      "stand": "Silver Chariot",
+      "role": "miner",
+      "title": "Swordsman & Miner",
+      "uuid": "6f49e4fa-5d6c-4e2c-a94d-077694e6f861",
+      "skinUrl": "http://textures.minecraft.net/texture/7c70395dcaa4f3c07c8ca89a98f29e8ec2f9984b0559e99961d53a44537db4d1",
+      "skinFile": "assets/skins/Polnareff.png",
+      "stats": { "pwr": "B", "spd": "A", "rng": "C", "dur": "B", "prc": "A", "dev": "C" }
+    },
+    "Avdol": {
+      "name": "Avdol",
+      "stand": "Magician's Red",
+      "role": "guard",
+      "title": "Pyro-Sentinel Guard",
+      "uuid": "07c7a12b-89ff-4b3f-85b0-51b73a24f1d4",
+      "skinUrl": "http://textures.minecraft.net/texture/266c15bdff1d751a8e6d2288b3fad9da9dee22ad222f93de2c50a4e79e102dcf",
+      "skinFile": "assets/skins/Avdol.png",
+      "stats": { "pwr": "B", "spd": "B", "rng": "C", "dur": "B", "prc": "C", "dev": "D" }
+    },
+    "Kakyoin": {
+      "name": "Kakyoin",
+      "stand": "Hierophant Green",
+      "role": "farmer",
+      "title": "Emerald Harvester & Scout",
+      "uuid": "f8d2f089-572d-46f6-ba67-7afd5064ac74",
+      "skinUrl": "http://textures.minecraft.net/texture/ff0e37bcb625962e373ab6b7e73761b9fdb1dcce32f0a632a5072e44a4c0030b",
+      "skinFile": "assets/skins/Kakyoin.png",
+      "stats": { "pwr": "C", "spd": "B", "rng": "A", "dur": "B", "prc": "C", "dev": "D" }
+    },
+    "Iggy": {
+      "name": "Iggy",
+      "stand": "The Fool",
+      "role": "scout",
+      "title": "Desert Scout & Vanguard",
+      "uuid": "cbfc77ae-144c-44c6-bd4b-220d642c75e5",
+      "skinUrl": "http://textures.minecraft.net/texture/ae9ff9a2fca9421b4f6d0a0d9140aaf4cbeb00495aa795af499a80fba0f6756f",
+      "skinFile": "assets/skins/Iggy.png",
+      "stats": { "pwr": "B", "spd": "C", "rng": "D", "dur": "C", "prc": "D", "dev": "C" }
+    }
+  }
+}

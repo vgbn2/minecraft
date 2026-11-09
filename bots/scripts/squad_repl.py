@@ -19,7 +19,7 @@ C_RED = '\033[1;31m'
 C_GRAY = '\033[90m'
 
 LOGS_DIR = os.environ.get('MC_LOGS_DIR', '/dev/shm/mc-bot')
-ROSTER = ['Jotaro', 'Bob', 'Torin', 'Arthur', 'Willow']
+ROSTER = ['Jotaro', 'Joseph', 'Polnareff', 'Avdol', 'Kakyoin', 'Iggy']
 
 def get_squad_status():
     agents = []

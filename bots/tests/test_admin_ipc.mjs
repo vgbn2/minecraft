@@ -35,15 +35,15 @@ assert.strictEqual(recallWithoutPos.type, 'BROADCAST')
 assert.strictEqual(recallWithoutPos.command, '!come')
 
 // 1.3 Direct targeting to squad members
-const bobRes = parseOperatorLine('Bob !build')
-assert.strictEqual(bobRes.type, 'DIRECT')
-assert.strictEqual(bobRes.target, 'Bob')
-assert.strictEqual(bobRes.command, '!build')
+const josephRes = parseOperatorLine('Joseph !build')
+assert.strictEqual(josephRes.type, 'DIRECT')
+assert.strictEqual(josephRes.target, 'Joseph')
+assert.strictEqual(josephRes.command, '!build')
 
-const torinRes = parseOperatorLine('torin !mine 10')
-assert.strictEqual(torinRes.type, 'DIRECT')
-assert.strictEqual(torinRes.target, 'Torin')
-assert.strictEqual(torinRes.command, '!mine 10')
+const polnareffRes = parseOperatorLine('polnareff !mine 10')
+assert.strictEqual(polnareffRes.type, 'DIRECT')
+assert.strictEqual(polnareffRes.target, 'Polnareff')
+assert.strictEqual(polnareffRes.command, '!mine 10')
 
 // 1.4 Broadcast 'all'
 const allRes = parseOperatorLine('all !come')

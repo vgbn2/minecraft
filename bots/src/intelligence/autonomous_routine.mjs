@@ -254,8 +254,8 @@ export class AutonomousIncentiveEngine {
     const r = this.role
     const botName = (this.bot.username || '').toLowerCase()
 
-    // Willow: Harvester (Tree logging & crop gathering)
-    if (r.includes('harvester') || botName === 'willow') {
+    // Kakyoin: Harvester (Tree logging & crop gathering)
+    if (r.includes('harvester') || r.includes('farmer') || botName === 'kakyoin' || botName === 'willow') {
       const wood = this.bot.findBlock({
         matching: b => b.name.includes('_log') || b.name.includes('wood'),
         maxDistance: 16
@@ -272,8 +272,8 @@ export class AutonomousIncentiveEngine {
       }
     }
 
-    // Torin: Miner (Stone, cobblestone, ores)
-    if (r.includes('miner') || botName === 'torin') {
+    // Polnareff: Miner (Stone, cobblestone, ores)
+    if (r.includes('miner') || botName === 'polnareff' || botName === 'torin') {
       const rock = this.bot.findBlock({
         matching: b => b.name === 'stone' || b.name === 'cobblestone' || b.name.includes('ore') || b.name.includes('deepslate'),
         maxDistance: 16
@@ -290,8 +290,8 @@ export class AutonomousIncentiveEngine {
       }
     }
 
-    // Bob: Architect / Builder (Foundation placement or gathering dirt/cobble)
-    if (r.includes('builder') || r.includes('architect') || botName === 'bob') {
+    // Joseph: Architect / Builder (Foundation placement or gathering dirt/cobble)
+    if (r.includes('builder') || r.includes('architect') || botName === 'joseph' || botName === 'bob') {
       const items = this.bot.inventory?.items() || []
       const blockItem = items.find(i =>
         i.name.includes('dirt') || i.name.includes('cobble') ||
@@ -338,8 +338,8 @@ export class AutonomousIncentiveEngine {
       }
     }
 
-    // Arthur: Sentinel (Clockwise perimeter corner sentry)
-    if (r.includes('sentinel') || botName === 'arthur') {
+    // Avdol: Sentinel (Clockwise perimeter corner sentry)
+    if (r.includes('sentinel') || r.includes('guard') || botName === 'avdol' || botName === 'avodl' || botName === 'arthur') {
       const corner = HOUSE_CORNERS[this.sentryCorner % HOUSE_CORNERS.length]
       this.watchdog?.setMode('TASK_ACTIVE', `sentry corner ${this.sentryCorner % 4}`)
       if (this.safeNav) {
@@ -347,6 +347,18 @@ export class AutonomousIncentiveEngine {
       }
       this.sentryCorner++
       this.recordProductiveWork(`completed sentry patrol to corner ${this.sentryCorner % 4}`)
+      return
+    }
+
+    // Iggy: Scout (Fast perimeter reconnaissance & vanguard survey)
+    if (r.includes('scout') || botName === 'iggy') {
+      const corner = HOUSE_CORNERS[(this.sentryCorner + 2) % HOUSE_CORNERS.length]
+      this.watchdog?.setMode('TASK_ACTIVE', `scout perimeter ${this.sentryCorner % 4}`)
+      if (this.safeNav) {
+        await this.safeNav.navigateTo(corner)
+      }
+      this.sentryCorner++
+      this.recordProductiveWork(`completed scout reconnaissance to corner ${this.sentryCorner % 4}`)
       return
     }
 

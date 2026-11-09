@@ -46,7 +46,7 @@ assert.strictEqual(check2.shouldDeliver, true, 'Should deliver when slots >= 28'
 console.log('  [PASS] Inventory capacity sentinel & thresholds')
 
 // Gate 3: Architect Pull Routine
-const mockBotBob = {
+const mockBotJoseph = {
   inventory: {
     items: () => [{ slot: 9, name: 'cobblestone', count: 10 }]
   }
@@ -55,7 +55,7 @@ const pullReq = [{ name: 'cobblestone', count: 32 }]
 // In test environment without world, deficits are identified accurately
 let passedDeficit = false
 try {
-  const result = await architectPullRoutine(mockBotBob, pullReq, depot)
+  const result = await architectPullRoutine(mockBotJoseph, pullReq, depot)
   passedDeficit = result.deficitCount >= 0
 } catch {}
 console.log('  [PASS] Architect pull routine deficit calculation')

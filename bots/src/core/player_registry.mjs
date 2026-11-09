@@ -1,5 +1,5 @@
 // ponytail: native zero-dependency player vs bot entity classifier; eliminates friendly-fire & circular squad chase
-export const SQUAD_BOT_NAMES = new Set(['jotaro', 'bob', 'torin', 'arthur', 'willow'])
+export const SQUAD_BOT_NAMES = new Set(['jotaro', 'joseph', 'polnareff', 'avdol', 'avodl', 'kakyoin', 'iggy'])
 
 export function isSquadBot(entityOrName, selfName = null) {
   if (!entityOrName) return false

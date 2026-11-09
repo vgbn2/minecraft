@@ -20,7 +20,7 @@ export const C = {
   gray: '\x1b[90m'
 }
 
-export const SQUAD_ROSTER = ['Jotaro', 'Bob', 'Torin', 'Arthur', 'Willow']
+export const SQUAD_ROSTER = ['Jotaro', 'Joseph', 'Polnareff', 'Avdol', 'Kakyoin', 'Iggy']
 
 /**
  * Parses user input lines into structured operator intents and quick macros.
@@ -128,7 +128,7 @@ export function createAdminBot(options = {}) {
     console.log(`  ${C.yellow}!recall${C.reset}              Order all bots to navigate to Operator coordinates`)
     console.log(`  ${C.yellow}!goto <x> <y> <z>${C.reset}    Direct all bots to navigate to target coordinates`)
     console.log(`  ${C.yellow}!stop${C.reset}                Emergency halt for all bot movements and tasks`)
-    console.log(`  ${C.cyan}<bot> <cmd>${C.reset}          Send direct command to named bot (e.g. 'Bob !build', 'Torin !mine')`)
+    console.log(`  ${C.cyan}<bot> <cmd>${C.reset}          Send direct command to named bot (e.g. 'Joseph !build', 'Polnareff !mine')`)
     console.log(`  ${C.cyan}all <cmd>${C.reset}            Broadcast command to all active squad members`)
     console.log(`  ${C.green}/<cmd>${C.reset}               Send raw Minecraft server slash command (e.g. '/time set day')`)
     console.log(`  ${C.gray}clear${C.reset}                Clear terminal screen`)

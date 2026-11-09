@@ -14,10 +14,11 @@ start_squad() {
 
     local squad_roster=(
         "Jotaro:commander:Star Platinum (A/A/C/A/A/A - Mastermind/Smartest)"
-        "Bob:builder:Crazy Diamond (A/A/D/B/A/C - Architect)"
-        "Torin:miner:Silver Chariot (B/A/C/B/A/C - Miner)"
-        "Arthur:guard:The World (A/B/B/A/B/B - Sentinel)"
-        "Willow:farmer:Gold Experience (C/A/A/C/A/B - Harvester)"
+        "Joseph:builder:Hermit Purple (D/C/A/A/D/E - Architect)"
+        "Polnareff:miner:Silver Chariot (B/A/C/B/A/C - Miner)"
+        "Avdol:guard:Magician's Red (B/B/C/B/C/D - Sentinel)"
+        "Kakyoin:farmer:Hierophant Green (C/B/A/B/C/D - Harvester)"
+        "Iggy:scout:The Fool (B/C/D/C/D/C - Scout)"
     )
 
     for entry in "${squad_roster[@]}"; do
@@ -35,7 +36,7 @@ start_squad() {
 
 stop_squad() {
     echo "[*] Recalling all JoJo Stand squad users..."
-    local squad_members=("Jotaro" "Bob" "Torin" "Arthur" "Willow")
+    local squad_members=("Jotaro" "Joseph" "Polnareff" "Avdol" "Kakyoin" "Iggy")
     for bname in "${squad_members[@]}"; do
         stop_bot "${bname}"
     done
@@ -46,14 +47,15 @@ status_squad() {
     echo "================================================================================"
     echo "                      ✦ JOJO STAND SQUAD STATUS MATRIX ✦"
     echo "================================================================================"
-    printf "%-8s %-16s %-11s %-16s %-20s\n" "AGENT" "STAND" "ROLE" "STATS(P/S/R/D/P/D)" "STATUS"
+    printf "%-10s %-16s %-11s %-16s %-20s\n" "AGENT" "STAND" "ROLE" "STATS(P/S/R/D/P/D)" "STATUS"
     echo "--------------------------------------------------------------------------------"
     local squad_defs=(
         "Jotaro:Star Platinum:Mastermind:A/A/C/A/A/A:commander"
-        "Bob:Crazy Diamond:Architect:A/A/D/B/A/C:builder"
-        "Torin:Silver Chariot:Miner:B/A/C/B/A/C:miner"
-        "Arthur:The World:Sentinel:A/B/B/A/B/B:guard"
-        "Willow:Gold Experience:Harvester:C/A/A/C/A/B:farmer"
+        "Joseph:Hermit Purple:Architect:D/C/A/A/D/E:builder"
+        "Polnareff:Silver Chariot:Miner:B/A/C/B/A/C:miner"
+        "Avdol:Magician's Red:Sentinel:B/B/C/B/C/D:guard"
+        "Kakyoin:Hierophant Green:Harvester:C/B/A/B/C/D:farmer"
+        "Iggy:The Fool:Scout:B/C/D/C/D/C:scout"
     )
     for entry in "${squad_defs[@]}"; do
         IFS=":" read -r bname bstand brole bstats bpers <<< "${entry}"
@@ -82,7 +84,7 @@ squad_repl() {
 cmd_squad() {
     local target_bot="Jotaro"
     if [[ $# -ge 2 ]]; then
-        if [[ -f "${PIDS_DIR}/$1.pid" || "$1" =~ ^(Jotaro|Bob|Torin|Arthur|Willow|all)$ ]]; then
+        if [[ -f "${PIDS_DIR}/$1.pid" || "$1" =~ ^(Jotaro|Joseph|Polnareff|Avdol|avodl|Kakyoin|Iggy|all)$ ]]; then
             target_bot="$1"
             shift
         fi
@@ -93,7 +95,7 @@ cmd_squad() {
         return 1
     fi
     if [[ "${target_bot}" == "all" ]]; then
-        for b in Jotaro Bob Torin Arthur Willow; do
+        for b in Jotaro Joseph Polnareff Avdol Kakyoin Iggy; do
             if [[ -d "/dev/shm/mc-bot" ]]; then
                 printf '%s\n' "${cmd_text}" >> "/dev/shm/mc-bot/${b}.cmd"
             else
@@ -113,7 +115,7 @@ cmd_squad() {
 
 watchdog_squad() {
     # Request fresh watchdog snapshot from all active squad members
-    for b in Jotaro Bob Torin Arthur Willow; do
+    for b in Jotaro Joseph Polnareff Avdol Kakyoin Iggy; do
         if [[ -d "/dev/shm/mc-bot" ]]; then
             printf '%s\n' "!watchdog" >> "/dev/shm/mc-bot/${b}.cmd" 2>/dev/null || true
         else
@@ -128,7 +130,7 @@ watchdog_squad() {
     printf "%-10s %-14s %-8s %-12s %-30s\n" "AGENT" "WATCHDOG" "STILL" "MODE" "TASK / REASON"
     echo "--------------------------------------------------------------------------------"
     local found_any=0
-    for b in Jotaro Bob Torin Arthur Willow; do
+    for b in Jotaro Joseph Polnareff Avdol Kakyoin Iggy; do
         local alert_file="/dev/shm/mc-bot/${b}.alert"
         [[ ! -f "${alert_file}" ]] && alert_file="/dev/shm/mc-bot-${b}.alert"
         if [[ -f "${alert_file}" ]]; then

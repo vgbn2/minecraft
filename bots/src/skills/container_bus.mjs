@@ -31,7 +31,7 @@ export const DEFAULT_CONTAINER_CATEGORIES = {
 
 export const GATHERER_STATES = {
   IDLE: 'IDLE',
-  EXTRACTION: 'EXTRACTION',   // Active harvesting: Mining (Torin) or Logging (Willow)
+  EXTRACTION: 'EXTRACTION',   // Active harvesting: Mining (Polnareff) or Logging (Kakyoin)
   DELIVERING: 'DELIVERING',   // Navigating to central depot
   DEPOSITING: 'DEPOSITING',   // Unloading raw materials into designated chests
   RESTOCKING: 'RESTOCKING',   // Replenishing food ration and tool durability

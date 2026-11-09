@@ -265,14 +265,14 @@ send_bot_cmd() {
     shift
     local target_bot=""
     if [[ $# -ge 2 ]]; then
-        if [[ -f "${PIDS_DIR}/$1.pid" || "$1" =~ ^(Jotaro|Bob|Torin|Arthur|Willow|all)$ || ( ! "$1" =~ ^[!/] && "$1" =~ ^[A-Za-z0-9_]+$ ) ]]; then
+        if [[ -f "${PIDS_DIR}/$1.pid" || "$1" =~ ^(Jotaro|Joseph|Polnareff|Avdol|avodl|Kakyoin|Iggy|all)$ || ( ! "$1" =~ ^[!/] && "$1" =~ ^[A-Za-z0-9_]+$ ) ]]; then
             target_bot="$1"
             shift
         fi
     fi
     local command_string="$*"
     if [[ -z "${command_string}" ]]; then
-        echo "Error: Command text required, e.g. mc-bot cmd '!status' or mc-bot cmd Bob '!build'" >&2
+        echo "Error: Command text required, e.g. mc-bot cmd '!status' or mc-bot cmd Joseph '!build'" >&2
         return 1
     fi
     if [[ "${is_remote}" -eq 1 ]]; then
@@ -287,7 +287,7 @@ send_bot_cmd() {
         echo "[+] Dispatched command to remote bot on CT 116: ${command_string}"
     else
         if [[ -z "${target_bot}" || "${target_bot}" == "all" ]]; then
-            for b in Jotaro Bob Torin Arthur Willow; do
+            for b in Jotaro Joseph Polnareff Avdol Kakyoin Iggy; do
                 if [[ -d "/dev/shm/mc-bot" ]]; then
                     printf '%s\n' "${command_string}" >> "/dev/shm/mc-bot/${b}.cmd"
                 else

@@ -197,13 +197,13 @@ export const TOOLS_SCHEMA = [
     type: 'function',
     function: {
       name: 'delegate_task',
-      description: 'Command a squad member (Bob, Torin, Arthur, Willow) to perform an action. You are the orchestrator.',
+      description: 'Command a squad member (Joseph, Polnareff, Avdol, Kakyoin, Iggy) to perform an action. You are the orchestrator.',
       parameters: {
         type: 'object',
         properties: {
           target_agent: {
             type: 'string',
-            enum: ['Bob', 'Torin', 'Arthur', 'Willow', 'Jotaro'],
+            enum: ['Joseph', 'Polnareff', 'Avdol', 'Kakyoin', 'Iggy', 'Jotaro'],
             description: 'Target squad member name'
           },
           command: {

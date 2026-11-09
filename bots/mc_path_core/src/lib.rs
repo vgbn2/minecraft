@@ -339,7 +339,7 @@ impl FVec3 {
 // 1. Spatial Entity & Player vs Squad Bot Registry
 // ---------------------------------------------------------------------------
 
-pub const SQUAD_BOT_NAMES: [&str; 5] = ["jotaro", "bob", "torin", "arthur", "willow"];
+pub const SQUAD_BOT_NAMES: [&str; 7] = ["jotaro", "joseph", "polnareff", "avdol", "avodl", "kakyoin", "iggy"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EntitySnapshot {
@@ -751,10 +751,12 @@ mod tests {
     #[test]
     fn test_player_bot_classification() {
         assert!(is_squad_bot("Jotaro", None));
-        assert!(is_squad_bot("bob", None));
-        assert!(is_squad_bot("TORIN", None));
-        assert!(is_squad_bot("Arthur", None));
-        assert!(is_squad_bot("Willow", None));
+        assert!(is_squad_bot("joseph", None));
+        assert!(is_squad_bot("POLNAREFF", None));
+        assert!(is_squad_bot("Avdol", None));
+        assert!(is_squad_bot("avodl", None));
+        assert!(is_squad_bot("Kakyoin", None));
+        assert!(is_squad_bot("Iggy", None));
         assert!(!is_squad_bot("vgbn", None));
         assert!(!is_squad_bot("Steve", None));
 
@@ -763,7 +765,7 @@ mod tests {
 
         assert!(is_human_player("vgbn", "player", None));
         assert!(is_human_player("Steve", "player", None));
-        assert!(!is_human_player("Bob", "player", None));
+        assert!(!is_human_player("Joseph", "player", None));
         assert!(!is_human_player("zombie", "mob", None));
     }
 
@@ -772,8 +774,8 @@ mod tests {
         let self_pos = FVec3::new(0.0, 64.0, 0.0);
         let entities = vec![
             EntitySnapshot::new(1, "Jotaro", Some("Jotaro"), "player", FVec3::new(0.0, 64.0, 0.0)),
-            EntitySnapshot::new(2, "Bob", Some("Bob"), "player", FVec3::new(2.0, 64.0, 0.0)),
-            EntitySnapshot::new(3, "Torin", Some("Torin"), "player", FVec3::new(4.0, 64.0, 0.0)),
+            EntitySnapshot::new(2, "Joseph", Some("Joseph"), "player", FVec3::new(2.0, 64.0, 0.0)),
+            EntitySnapshot::new(3, "Polnareff", Some("Polnareff"), "player", FVec3::new(4.0, 64.0, 0.0)),
             EntitySnapshot::new(4, "vgbn", Some("vgbn"), "player", FVec3::new(12.0, 64.0, 0.0)),
             EntitySnapshot::new(5, "zombie", None, "mob", FVec3::new(6.0, 64.0, 0.0)),
         ];
@@ -788,7 +790,7 @@ mod tests {
         let self_pos = FVec3::new(0.0, 64.0, 0.0);
         let entities = vec![
             EntitySnapshot::new(1, "Jotaro", Some("Jotaro"), "player", FVec3::new(0.0, 64.0, 0.0)),
-            EntitySnapshot::new(2, "bOb", Some("bOb"), "player", FVec3::new(3.0, 64.0, 0.0)),
+            EntitySnapshot::new(2, "jOsEph", Some("jOsEph"), "player", FVec3::new(3.0, 64.0, 0.0)),
             EntitySnapshot::new(3, "vgbn", Some("vgbn"), "player", FVec3::new(10.0, 64.0, 0.0)),
             EntitySnapshot::new(4, "creeper", None, "mob", FVec3::new(7.0, 64.0, 0.0)),
             EntitySnapshot::new(5, "far_player", Some("far_player"), "player", FVec3::new(50.0, 64.0, 0.0)),
@@ -797,8 +799,8 @@ mod tests {
         let survey = format_entity_survey(self_pos, "Jotaro", &entities, 20.0);
         assert_eq!(survey.humans.len(), 1, "Exactly 1 human within 20m");
         assert_eq!(survey.humans[0], "vgbn(10m)");
-        assert_eq!(survey.squad.len(), 1, "Self excluded, only bOb in squad");
-        assert_eq!(survey.squad[0], "bOb(3m)");
+        assert_eq!(survey.squad.len(), 1, "Self excluded, only jOsEph in squad");
+        assert_eq!(survey.squad[0], "jOsEph(3m)");
         assert_eq!(survey.mobs.len(), 1);
         assert_eq!(survey.mobs[0], "creeper(7m)");
         assert!(!survey.humans.iter().any(|h| h.contains("far_player")));

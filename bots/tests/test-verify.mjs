@@ -752,7 +752,7 @@ runTest('MotionWatchdog stationary alert with standby & farm AFK exemptions', ()
   let simulatedTime = 1000000
   const now = () => simulatedTime
   const mockBot = new EventEmitter()
-  mockBot.username = 'Arthur'
+  mockBot.username = 'Avdol'
   mockBot.entity = { position: { x: -240, y: 65, z: 97 } }
   mockBot.targetDigBlock = null
   mockBot.collectBlock = null
@@ -801,14 +801,16 @@ console.log('\n--- Gate 16: Player vs Squad Bot Registry & Spatial Differentiati
 runTest('Player vs bot classification, self-exclusion, and spatial entity survey segregation', () => {
   // 1. Classification
   assert.strictEqual(isSquadBot('Jotaro'), true)
-  assert.strictEqual(isSquadBot('Bob'), true)
-  assert.strictEqual(isSquadBot('Torin'), true)
-  assert.strictEqual(isSquadBot('Arthur'), true)
-  assert.strictEqual(isSquadBot('Willow'), true)
+  assert.strictEqual(isSquadBot('Joseph'), true)
+  assert.strictEqual(isSquadBot('Polnareff'), true)
+  assert.strictEqual(isSquadBot('Avdol'), true)
+  assert.strictEqual(isSquadBot('avodl'), true)
+  assert.strictEqual(isSquadBot('Kakyoin'), true)
+  assert.strictEqual(isSquadBot('Iggy'), true)
   assert.strictEqual(isSquadBot('vgbn'), false)
 
   assert.strictEqual(isHumanPlayer('vgbn'), true)
-  assert.strictEqual(isHumanPlayer('Bob'), false)
+  assert.strictEqual(isHumanPlayer('Joseph'), false)
 
   // 2. Spatial Nearest Selection ignores squad teammates
   const mockSurveyBot = {
@@ -816,7 +818,7 @@ runTest('Player vs bot classification, self-exclusion, and spatial entity survey
     entity: { position: { x: 0, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x, p.z) } },
     entities: {
       0: { username: 'Jotaro', type: 'player', position: { x: 0, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x, p.z) } },
-      1: { username: 'Bob', type: 'player', position: { x: 3, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x - 3, p.z) } },
+      1: { username: 'Joseph', type: 'player', position: { x: 3, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x - 3, p.z) } },
       2: { username: 'vgbn', type: 'player', position: { x: 10, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x - 10, p.z) } },
       3: { name: 'zombie', type: 'mob', position: { x: 7, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x - 7, p.z) } }
     }
@@ -824,14 +826,14 @@ runTest('Player vs bot classification, self-exclusion, and spatial entity survey
 
   const nearest = getNearestHuman(mockSurveyBot)
   assert.ok(nearest, 'Nearest human must be discovered')
-  assert.strictEqual(nearest.username, 'vgbn', 'Nearest human must be vgbn, skipping teammate Bob')
+  assert.strictEqual(nearest.username, 'vgbn', 'Nearest human must be vgbn, skipping teammate Joseph')
 
   // 3. Survey formatting segregates categories
   const survey = formatEntitySurvey(mockSurveyBot, 20)
   assert.strictEqual(survey.humans.length, 1)
   assert.strictEqual(survey.humans[0], 'vgbn(10m)')
   assert.strictEqual(survey.squad.length, 1)
-  assert.strictEqual(survey.squad[0], 'Bob(3m)')
+  assert.strictEqual(survey.squad[0], 'Joseph(3m)')
   assert.strictEqual(survey.mobs.length, 1)
   assert.strictEqual(survey.mobs[0], 'zombie(7m)')
   assert.ok(!survey.humans.includes('Jotaro'), 'Self must never appear in humans')

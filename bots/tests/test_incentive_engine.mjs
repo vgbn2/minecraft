@@ -37,7 +37,7 @@ const mockWatchdog = {
 }
 
 // Gate 1: Initialization
-const bot = createMockBot('Torin', 'miner')
+const bot = createMockBot('Polnareff', 'miner')
 const engine = new AutonomousIncentiveEngine(bot, mockSafeNav, mockWatchdog, 'miner')
 assert.strictEqual(engine.laborCredits, 0, 'Labor credits must start at 0')
 assert.strictEqual(engine.slackingSeconds, 0, 'Slacking timer must start at 0')
@@ -81,9 +81,9 @@ assert.strictEqual(bot.health, 16, 'Consuming food must restore health')
 console.log('  [PASS] Gate 5: Survival eating drive replenishes vitals to keep agent alive')
 
 // Gate 6: Mutual squad aid (sharing food with injured teammate)
-const arthurBot = createMockBot('Arthur', 'sentinel')
-arthurBot.health = 8 // Injured teammate
-bot.players['Arthur'] = { entity: { position: new Vec3(-238, 65, 100) } }
+const avdolBot = createMockBot('Avdol', 'sentinel')
+avdolBot.health = 8 // Injured teammate
+bot.players['Avdol'] = { entity: { position: new Vec3(-238, 65, 100) } }
 let tossed = false
 bot.inventory.items = () => [
   { name: 'bread', type: 297, count: 2 },
@@ -100,7 +100,7 @@ assert.ok(tossed, 'Food item must be tossed to teammate')
 console.log('  [PASS] Gate 6: Squad mutual aid and food sharing')
 
 // Gate 7: Role specialization routing
-const sentryBot = createMockBot('Arthur', 'sentinel')
+const sentryBot = createMockBot('Avdol', 'sentinel')
 const sentryEngine = new AutonomousIncentiveEngine(sentryBot, mockSafeNav, mockWatchdog, 'sentinel')
 let targetCornerReached = false
 sentryEngine.safeNav = {
