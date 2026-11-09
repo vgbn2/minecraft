@@ -98,23 +98,28 @@ remote_start_bot() {
     fi
 
     echo "[*] Launching '${bot_name}' (${personality}) remotely on CT 116 (${REMOTE_HOST})..."
-    echo "[*] Target endpoint: ${target_host}:${target_port} | Resource limit: 256MB RAM | nice=10"
+    echo "[*] Target endpoint: ${target_host}:${target_port} | Resource limit: 512MB RAM | nice=10"
 
-    # Launch daemonized in /dev/shm tmpfs with resource constraints
+    local remote_bot_pid="/dev/shm/mc-bot/pids/${bot_name}.pid"
+    local remote_bot_log="/dev/shm/mc-bot/${bot_name}.log"
+
+    # Launch daemonized in /dev/shm tmpfs with per-bot PID/log isolation
     local remote_pid
     remote_pid=$(remote_ssh "
-        mkdir -p /root/.local/share/mc-bot /dev/shm
+        mkdir -p /root/.local/share/mc-bot /dev/shm/mc-bot/pids /dev/shm/mc-bot/roster
         [[ -f /opt/mc-bot/config.json && ! -f /root/.local/share/mc-bot/config.json ]] && cp /opt/mc-bot/config.json /root/.local/share/mc-bot/config.json
         cd ${REMOTE_DIR}
         MC_HOST='${target_host}' \
         MC_PORT='${target_port}' \
         MC_BOT_NAME='${bot_name}' \
         MC_BOT_PERSONALITY='${personality}' \
-        MC_LOG_FILE='${REMOTE_LOG}' \
-        nohup nice -n 10 node --max-old-space-size=512 companion.mjs >> '${REMOTE_LOG}' 2>&1 &
+        MC_LOG_FILE='${remote_bot_log}' \
+        nohup nice -n 10 node --max-old-space-size=512 companion.mjs >> '${remote_bot_log}' 2>&1 &
+        echo \$! > '${remote_bot_pid}'
         echo \$! > '${REMOTE_PID}'
+        ln -sf '${remote_bot_log}' '${REMOTE_LOG}' 2>/dev/null
         sleep 1
-        cat '${REMOTE_PID}'
+        cat '${remote_bot_pid}'
     ")
 
     if remote_ssh "kill -0 ${remote_pid} 2>/dev/null"; then

@@ -9,6 +9,49 @@ import { IpcManager } from '../core/ipc.mjs'
 import { TOOLS_SCHEMA } from './tools_schema.mjs'
 import { isSquadBot, isHumanPlayer, getNearestHuman, formatEntitySurvey } from '../core/player_registry.mjs'
 
+const ROLE_TOOL_ALLOWLIST = {
+  miner: new Set(['mine_resource', 'break_block', 'goto_coordinates', 'come_to_player', 'stay', 'give_to_player', 'bootstrap_tools']),
+  farmer: new Set(['manage_farm', 'goto_coordinates', 'come_to_player', 'stay', 'give_to_player']),
+  builder: new Set(['build_structure', 'deconstruct_area', 'goto_coordinates', 'come_to_player', 'stay', 'inspect_block']),
+  guard: new Set(['attack_nearest', 'goto_coordinates', 'come_to_player', 'follow_player', 'stay']),
+  scout: new Set(['goto_coordinates', 'come_to_player', 'follow_player', 'stay', 'inspect_block'])
+}
+
+export function getToolsForRole(role) {
+  const key = String(role || '').toLowerCase()
+  const allow = ROLE_TOOL_ALLOWLIST[key]
+  if (!allow) return TOOLS_SCHEMA
+  return TOOLS_SCHEMA.filter(t => allow.has(t.function?.name))
+}
+
+export class LeakyBucketLimiter {
+  constructor(maxConcurrent = 2, maxQueue = 32) {
+    this.maxConcurrent = maxConcurrent
+    this.maxQueue = maxQueue
+    this.active = 0
+    this.queue = []
+  }
+
+  async run(fn) {
+    if (this.active >= this.maxConcurrent) {
+      if (this.queue.length >= this.maxQueue) {
+        throw new Error('llm_rate_limit_queue_full')
+      }
+      await new Promise((resolve, reject) => this.queue.push({ resolve, reject }))
+    }
+    this.active++
+    try {
+      return await fn()
+    } finally {
+      this.active--
+      const next = this.queue.shift()
+      if (next) next.resolve()
+    }
+  }
+}
+
+export const defaultLlmLimiter = new LeakyBucketLimiter(2, 32)
+
 export class AIAgent {
   constructor(bot, config, personality, options = {}) {
     this.bot = bot
@@ -18,6 +61,7 @@ export class AIAgent {
     this.supervisor = options.supervisor
     this.sendResponse = options.sendResponse
     this.watchdog = options.watchdog
+    this.limiter = options.limiter || defaultLlmLimiter
     this.tokenTotals = { prompt: 0, completion: 0, total: 0, calls: 0, lastLatency: 0 }
   }
 
@@ -249,7 +293,8 @@ export class AIAgent {
     const t0 = Date.now()
 
     try {
-      const res = await fetch(`${this.config.api_base.replace(/\/+$/, '')}/chat/completions`, {
+      const roleTools = getToolsForRole(this.personality?.roleKey)
+      const res = await this.limiter.run(() => fetch(`${this.config.api_base.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -268,12 +313,12 @@ export class AIAgent {
               content: userMessage
             }
           ],
-          tools: TOOLS_SCHEMA,
+          tools: roleTools,
           tool_choice: 'auto',
           max_tokens: 1000,
           temperature: 0.3
         })
-      })
+      }))
 
       const latency = Date.now() - t0
 

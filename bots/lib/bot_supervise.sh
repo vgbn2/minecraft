@@ -1,6 +1,39 @@
 #!/usr/bin/env bash
 # bot_supervise.sh: Local companion bot process supervision, PID tracking, and log management.
-# ponytail: local process tracking via POSIX PID files and /dev/shm logs; zero overhead.
+# ponytail: local process tracking via POSIX PID files + /proc/<pid>/environ verification; zero overhead.
+
+pid_matches_bot() {
+    local pid="${1:-}"
+    local expected_name="${2:-}"
+    [[ -n "${pid}" && "${pid}" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "${pid}" 2>/dev/null || return 1
+    if [[ -r "/proc/${pid}/cmdline" ]] && ! tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null | grep -Eq 'node.*(companion\.mjs|src/index\.mjs)'; then
+        return 1
+    fi
+    if [[ -n "${expected_name}" && -r "/proc/${pid}/environ" ]]; then
+        if ! tr '\0' '\n' < "/proc/${pid}/environ" 2>/dev/null | grep -Fqx "MC_BOT_NAME=${expected_name}"; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+recover_orphan_bot_pid() {
+    local target_name="${1:-}"
+    [[ -n "${target_name}" ]] || return 1
+    local cand_pids=""
+    if cand_pids=$(pgrep -u "${UID:-$(id -u)}" -f 'companion\.mjs' 2>/dev/null); then
+        local cpid
+        for cpid in ${cand_pids}; do
+            if pid_matches_bot "${cpid}" "${target_name}"; then
+                mkdir -p "${PIDS_DIR}"
+                echo "${cpid}" > "${PIDS_DIR}/${target_name}.pid"
+                return 0
+            fi
+        done
+    fi
+    return 1
+}
 
 bot_is_running() {
     local target_name="${1:-}"
@@ -9,24 +42,30 @@ bot_is_running() {
         if [[ -f "${pid_file}" ]]; then
             local pid
             pid=$(cat "${pid_file}")
-            if kill -0 "${pid}" 2>/dev/null; then
+            if pid_matches_bot "${pid}" "${target_name}"; then
                 return 0
             fi
+            rm -f "${pid_file}"
+        fi
+        if recover_orphan_bot_pid "${target_name}"; then
+            return 0
         fi
         return 1
     fi
     for pid_file in "${PIDS_DIR}"/*.pid; do
         [[ -f "${pid_file}" ]] || continue
+        local bname
+        bname="$(basename "${pid_file}" .pid)"
         local pid
         pid=$(cat "${pid_file}")
-        if kill -0 "${pid}" 2>/dev/null; then
+        if pid_matches_bot "${pid}" "${bname}"; then
             return 0
         fi
     done
     if [[ -f "${DATA_DIR}/bot.pid" ]]; then
         local pid
         pid=$(cat "${DATA_DIR}/bot.pid")
-        if kill -0 "${pid}" 2>/dev/null; then
+        if pid_matches_bot "${pid}" ""; then
             return 0
         fi
     fi
@@ -116,22 +155,24 @@ stop_bot() {
             bname="$(basename "${pid_file}" .pid)"
             local pid
             pid=$(cat "${pid_file}")
-            if kill -0 "${pid}" 2>/dev/null; then
+            if pid_matches_bot "${pid}" "${bname}"; then
                 echo "[*] Stopping bot '${bname}' (PID: ${pid})..."
-                kill "${pid}" 2>/dev/null || true
+                if kill "${pid}" 2>/dev/null; then :; fi
                 sleep 0.5
                 if kill -0 "${pid}" 2>/dev/null; then
-                    kill -9 "${pid}" 2>/dev/null || true
+                    if kill -9 "${pid}" 2>/dev/null; then :; fi
                 fi
                 echo "[+] Bot '${bname}' stopped."
                 stopped=$((stopped + 1))
             fi
-            rm -f "${pid_file}"
+            rm -f "${pid_file}" "/dev/shm/mc-bot/roster/${bname}.json"
         done
         if [[ -f "${DATA_DIR}/bot.pid" ]]; then
             local lpid
             lpid=$(cat "${DATA_DIR}/bot.pid")
-            kill "${lpid}" 2>/dev/null || true
+            if pid_matches_bot "${lpid}" ""; then
+                if kill "${lpid}" 2>/dev/null; then :; fi
+            fi
             rm -f "${DATA_DIR}/bot.pid"
             stopped=$((stopped + 1))
         fi
@@ -140,22 +181,28 @@ stop_bot() {
         fi
     else
         local pid_file="${PIDS_DIR}/${target_name}.pid"
+        if [[ ! -f "${pid_file}" ]]; then
+            if recover_orphan_bot_pid "${target_name}"; then
+                :
+            fi
+        fi
         if [[ -f "${pid_file}" ]]; then
             local pid
             pid=$(cat "${pid_file}")
-            if kill -0 "${pid}" 2>/dev/null; then
+            if pid_matches_bot "${pid}" "${target_name}"; then
                 echo "[*] Stopping bot '${target_name}' (PID: ${pid})..."
-                kill "${pid}" 2>/dev/null || true
+                if kill "${pid}" 2>/dev/null; then :; fi
                 sleep 0.5
                 if kill -0 "${pid}" 2>/dev/null; then
-                    kill -9 "${pid}" 2>/dev/null || true
+                    if kill -9 "${pid}" 2>/dev/null; then :; fi
                 fi
                 echo "[+] Bot '${target_name}' stopped."
             else
                 echo "[*] Bot process ${pid} already exited."
             fi
-            rm -f "${pid_file}"
+            rm -f "${pid_file}" "/dev/shm/mc-bot/roster/${target_name}.json"
         else
+            rm -f "/dev/shm/mc-bot/roster/${target_name}.json"
             echo "Bot '${target_name}' is not running (no PID file found)."
         fi
     fi

@@ -2,7 +2,7 @@
 import { Vec3 } from 'vec3'
 
 export class CombatEvasionController {
-  constructor(bot) {
+  constructor(bot, options = {}) {
     this.bot = bot
     this.active = false
     this.target = null
@@ -10,6 +10,11 @@ export class CombatEvasionController {
     this.lastStrafeSwitch = Date.now()
     this.lastAttackTime = 0
     this.shieldActive = false
+    this.tickCounter = 0
+    this.idleTickStride = options.idleTickStride || 10 // 20 Hz / 10 = 2 Hz when non-combat
+    this.passiveScanCount = 0
+    this.activeTickCount = 0
+    this.onPassiveScan = options.onPassiveScan || null
     this._bindEvents()
   }
 
@@ -35,7 +40,16 @@ export class CombatEvasionController {
   }
 
   _onTick() {
-    if (!this.active || !this.target || !this.target.isValid) {
+    this.tickCounter = (this.tickCounter + 1) | 0
+    if (!this.active) {
+      if (this.tickCounter % this.idleTickStride === 0) {
+        this.passiveScanCount++
+        if (this.onPassiveScan) this.onPassiveScan(this.bot)
+      }
+      return
+    }
+    this.activeTickCount++
+    if (!this.target || !this.target.isValid) {
       if (this.active) this.stop()
       return
     }

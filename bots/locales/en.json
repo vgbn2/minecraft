@@ -9,7 +9,7 @@
     "BUILD": ["build", "place", "construct"],
     "GUARD": ["guard", "defend", "protect", "sentry", "patrol", "kill", "attack"],
     "HARVEST": ["harvest", "farm", "crop", "gather", "log", "wood"],
-    "FEED": ["hungry", "starving", "need food", "feed", "food"],
+    "FEED": ["hungry", "hungey", "hungy", "starving", "famished", "need food", "feed", "food"],
     "SCOUT": ["scout", "explore", "recon"],
     "COME": ["come", "here", "follow"],
     "GOTO": ["goto", "go to", "walk to", "move to"],

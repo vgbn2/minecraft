@@ -71,7 +71,7 @@ fi
 rm -f "${TEST_SHM_LOG}"
 
 echo "[*] 6. Testing structure plan generation..."
-(cd "${HOME}/.local/share/mc-bot" && node --input-type=module -e '
+(cd "${BOT_DIR}" && node --input-type=module -e '
 import { Vec3 } from "vec3";
 // Test structure plan logic
 const orig = new Vec3(0, 64, 0);
@@ -97,11 +97,13 @@ console.log("Structure plans verified.");
 ')
 
 echo "[*] 7. Testing sync command..."
-SYNC_OUT=$("${BOT_BIN}" sync)
-assert_contains "Synced local bot modules" "${SYNC_OUT}" "Sync local output"
+if [[ -z "${CI:-}" && "${OFFLINE_ONLY:-0}" != "1" ]]; then
+    SYNC_OUT=$("${BOT_BIN}" sync)
+    assert_contains "Synced local bot modules" "${SYNC_OUT}" "Sync local output"
+fi
 
 echo "[*] 8. Testing safe hop slicing logic..."
-(cd "${HOME}/.local/share/mc-bot" && node --input-type=module -e '
+(cd "${BOT_DIR}" && node --input-type=module -e '
 import assert from "node:assert";
 import { sliceTrajectory } from "./navigator.mjs";
 const start = { x: 0, y: 64, z: 0 };
@@ -119,7 +121,7 @@ console.log("Safe hop slicing verified.");
 ')
 
 echo "[*] 9. Testing Prompter Supervisor & Waypoint Landmark Graph..."
-(cd "${HOME}/.local/share/mc-bot" && node --input-type=module -e '
+(cd "${BOT_DIR}" && node --input-type=module -e '
 import assert from "node:assert";
 import { WaypointGraph, generateDeconstructionPlan, PrompterSupervisor } from "./prompter.mjs";
 // 1. Deconstruction plan Y-descending check
@@ -158,8 +160,10 @@ PROBE_JSON=$("${BOT_BIN}" probe --json)
 assert_contains '"port":' "${PROBE_JSON}" "Probe JSON contains port"
 assert_contains '"host":' "${PROBE_JSON}" "Probe JSON contains host"
 
-REMOTE_STATUS=$("${BOT_BIN}" --remote status 2>&1 || true)
-assert_contains "Proxmox CT 116 Remote Companion Bot Status" "${REMOTE_STATUS}" "Remote status output"
+if [[ -z "${CI:-}" && "${OFFLINE_ONLY:-0}" != "1" ]]; then
+    if REMOTE_STATUS=$("${BOT_BIN}" --remote status 2>&1); then :; fi
+    assert_contains "Proxmox CT 116 Remote Companion Bot Status" "${REMOTE_STATUS}" "Remote status output"
+fi
 
 echo "[*] 11. Testing unknown command exit status..."
 actual=0
@@ -169,7 +173,13 @@ if [[ "${actual}" -ne 1 ]]; then
 fi
 
 echo "[*] 12. Testing native Rust pathfinding engine (mc-path-fast)..."
-if command -v mc-path-fast >/dev/null 2>&1; then
+MC_PATH_BIN_RESOLVED="${BOT_DIR}/mc_path_core/target/release/mc-path-fast"
+if [[ -x "${MC_PATH_BIN_RESOLVED}" ]]; then
+    NATIVE_OUT=$("${MC_PATH_BIN_RESOLVED}" slice 0 64 0 64 64 0 16)
+    assert_contains "Sliced 4 hops" "${NATIVE_OUT}" "mc-path-fast slicing"
+    BENCH_OUT=$("${MC_PATH_BIN_RESOLVED}" bench 20)
+    assert_contains "Benchmark Complete" "${BENCH_OUT}" "mc-path-fast benchmark"
+elif command -v mc-path-fast >/dev/null 2>&1; then
     NATIVE_OUT=$(mc-path-fast slice 0 64 0 64 64 0 16)
     assert_contains "Sliced 4 hops" "${NATIVE_OUT}" "mc-path-fast slicing"
     BENCH_OUT=$(mc-path-fast bench 20)
@@ -177,11 +187,11 @@ if command -v mc-path-fast >/dev/null 2>&1; then
 fi
 
 echo "[*] 13. Testing Combat Evasion & Tactical Escape controllers..."
-(cd "${HOME}/.local/share/mc-bot" && node --input-type=module -e '
+(cd "${BOT_DIR}" && node --input-type=module -e '
 import assert from "node:assert";
 import { EventEmitter } from "node:events";
-import { CombatEvasionController } from "./combat_evasion.mjs";
-import { TacticalEscapeExcavator } from "./tactical_escape.mjs";
+import { CombatEvasionController } from "./src/kinematics/combat_evasion.mjs";
+import { TacticalEscapeExcavator } from "./src/kinematics/tactical_escape.mjs";
 
 const mockBot = new EventEmitter();
 mockBot.controlState = {};

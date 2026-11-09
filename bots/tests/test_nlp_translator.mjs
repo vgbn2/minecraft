@@ -1,6 +1,7 @@
 // Unit Test Suite for Intermediate NLP Translation Layer
 import assert from 'node:assert'
-import { NlpTranslationLayer, ROLE_AGENT_MAP, CRUSADER_NAMES } from '../src/intelligence/nlp_translator.mjs'
+import { NlpTranslationLayer, ROLE_AGENT_MAP, CRUSADER_NAMES, reconstructVietnameseTelexSlip } from '../src/intelligence/nlp_translator.mjs'
+import { buildBungeeFakeHost } from '../src/core/client.mjs'
 
 console.log('[*] Testing NLP Translation Layer (Human Speech -> Crusader Prompts)...')
 
@@ -132,6 +133,41 @@ assert.strictEqual(resHungryVN[0].targetAgent, 'Kakyoin')
 assert.strictEqual(resHungryVN[0].intent, 'FEED')
 assert.strictEqual(resHungryVN[0].command, '!feed vgbn')
 
-console.log('  [PASS] Gate 6: Declarative condition-state routing verified.')
+// Gate 7: Non-ASCII Guarded NFD Vietnamese Telex Slip Reconstruction & Bungee Skin Handshake (#21)
+assert.strictEqual(reconstructVietnameseTelexSlip('status'), 'status', 'ASCII "status" must never be altered')
+assert.strictEqual(reconstructVietnameseTelexSlip('box'), 'box', 'ASCII "box" must never be altered')
+assert.strictEqual(reconstructVietnameseTelexSlip('first'), 'first', 'ASCII "first" must never be altered')
+
+const resTelexHungry = translator.translate('vgbn', 'im hủngey')
+assert.strictEqual(resTelexHungry.length, 1)
+assert.strictEqual(resTelexHungry[0].targetAgent, 'Kakyoin')
+assert.strictEqual(resTelexHungry[0].intent, 'FEED')
+assert.strictEqual(resTelexHungry[0].command, '!feed vgbn')
+
+const resTelexIron = translator.translate('vgbn', 'mine 12 ỉon')
+assert.strictEqual(resTelexIron[0].intent, 'MINE')
+assert.strictEqual(resTelexIron[0].command, '!mine iron_ore 12')
+
+const resTelexFarm = translator.translate('vgbn', 'fảm wheat')
+assert.strictEqual(resTelexFarm[0].intent, 'HARVEST')
+
+const resTelexGuard = translator.translate('vgbn', 'guảd base')
+assert.strictEqual(resTelexGuard[0].intent, 'GUARD')
+
+const resTelexStop = translator.translate('vgbn', 'stóp')
+assert.strictEqual(resTelexStop[0].intent, 'STOP')
+
+const fakeHost = buildBungeeFakeHost('192.168.4.117', 'Jotaro', { MC_PROXY_BUNGEE: 'true', MC_LOCAL_IP: '10.0.0.5' })
+assert.ok(fakeHost && fakeHost.includes('\x00'), 'Bungee fakeHost must use single \\x00 NUL byte delimiters')
+assert.ok(!fakeHost.includes('\\0'), 'Bungee fakeHost must NOT contain literal backslash-zero')
+const parts = fakeHost.split('\x00')
+assert.strictEqual(parts.length, 4, 'Bungee fakeHost must have 4 NUL-separated segments')
+assert.strictEqual(parts[0], '192.168.4.117')
+assert.strictEqual(parts[1], '10.0.0.5')
+const props = JSON.parse(parts[3])
+assert.strictEqual(props[0].name, 'textures')
+assert.ok(props[0].value && props[0].signature, 'Bungee textures property must include signed value and signature')
+
+console.log('  [PASS] Gate 6 & 7: Declarative condition-state, NFD Telex slip, and Bungee skin handshake verified.')
 
 console.log('\nPASS: test_nlp_translator.mjs completed successfully with 0 errors.')

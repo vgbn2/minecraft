@@ -16,22 +16,31 @@ concurrency:
 
 jobs:
   verify-bots:
-    name: Verify Autonomous JoJo Stand Bots
+    name: Verify Autonomous JoJo Stand Bots & 500-Agent Society
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20.x, 22.x]
+        node-version: [22.x, 24.x]
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
           cache-dependency-path: bots/package-lock.json
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build & Test Native Rust 3D Voxel Engine (mc_path_core)
+        working-directory: bots/mc_path_core
+        run: |
+          cargo test --release
+          cargo build --release
 
       - name: Install Bot Dependencies
         working-directory: bots
@@ -45,27 +54,38 @@ jobs:
             node --check "$f" || exit 1
           done
 
-      - name: Run Core Diagnostic & Gate Verification Suite (20 Gates)
+      - name: Run Full Bot Test Suite (16 Node Suites + Rust Socket Daemon + SQLite $DIA Ledger)
         working-directory: bots
         env:
           OFFLINE_ONLY: '1'
+          CI: 'true'
         run: |
-          node test-verify.mjs
+          npm test
 
-      - name: Verify JoJo Stand Squad Roster & Archetypes
+      - name: Run CLI & Orchestration Shell Harness
         working-directory: bots
+        env:
+          OFFLINE_ONLY: '1'
+          CI: 'true'
         run: |
-          node tests/test_squad_jojo.mjs
+          bash tests/test_mc_bot.sh
 
-      - name: Verify Central Depot & Logistics Engine
-        working-directory: bots
-        run: |
-          node tests/test_logistics_depot.mjs
+  verify-go-systems:
+    name: Verify Go Control Plane & Telemetry Systems
+    runs-on: ubuntu-latest
 
-      - name: Verify Agriculture & Tech Tree Bootstrap
-        working-directory: bots
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run Go Race-Enabled Test Suite
         run: |
-          node tests/test_agriculture_tech.mjs
+          go test -race ./...
 
   verify-server-configs:
     name: Validate Minecraft Server Configs & Tools
@@ -73,10 +93,10 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 

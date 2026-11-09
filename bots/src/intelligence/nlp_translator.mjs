@@ -19,6 +19,50 @@ export const ROLE_AGENT_MAP = {
 
 export const CRUSADER_NAMES = ['Jotaro', 'Joseph', 'Polnareff', 'Avdol', 'Kakyoin', 'Iggy']
 
+const TELEX_TONE_KEY_MAP = {
+  '\u0309': 'r', // hỏi
+  '\u0301': 's', // sắc
+  '\u0300': 'f', // huyền
+  '\u0303': 'x', // ngã
+  '\u0323': 'j'  // nặng
+}
+
+const ENGLISH_TELEX_LEMMAS = new Set([
+  'hungry', 'hungey', 'hungy', 'starving', 'famished',
+  'iron', 'farm', 'guard', 'stop', 'mine', 'build',
+  'harvest', 'scout', 'come', 'follow', 'status',
+  'shelter', 'house', 'stone', 'dirt', 'wood', 'bread', 'food'
+])
+
+// ponytail: non-ASCII guarded NFD Telex slip reconstructor; 0% mutation on ASCII or native Vietnamese words
+export function reconstructVietnameseTelexSlip(text) {
+  if (!text || typeof text !== 'string') return ''
+  return text.replace(/\S+/g, (token) => {
+    // Strictly skip pure-ASCII tokens so words like "status", "box", "first" are never altered
+    if (!/[^\x00-\x7F]/.test(token)) return token
+
+    const lower = token.toLowerCase()
+    const nfd = lower.normalize('NFD')
+    if (!/[\u0309\u0301\u0300\u0303\u0323]/.test(nfd)) return token
+
+    // Candidate 1: inline vowel+tone -> vowel+telexKey (e.g. "ỉon" -> "iron", "fảm" -> "farm", "guảd" -> "guard")
+    const inlineRestored = nfd
+      .replace(/([\u0309\u0301\u0300\u0303\u0323])/g, (m) => TELEX_TONE_KEY_MAP[m] || '')
+      .replace(/[\u0300-\u036f]/g, '')
+    if (ENGLISH_TELEX_LEMMAS.has(inlineRestored)) {
+      return inlineRestored === 'hungey' || inlineRestored === 'hungy' ? 'hungry' : inlineRestored
+    }
+
+    // Candidate 2: stripped tone mark (e.g. "hủngey" -> "hungey" -> "hungry", "stóp" -> "stop")
+    const stripped = nfd.replace(/[\u0300-\u036f]/g, '')
+    if (ENGLISH_TELEX_LEMMAS.has(stripped)) {
+      return stripped === 'hungey' || stripped === 'hungy' ? 'hungry' : stripped
+    }
+
+    return token
+  })
+}
+
 // Dynamic item alias map proxy for backwards compatibility
 export const ITEM_ALIAS_MAP = new Proxy({}, {
   get(_, prop) {
@@ -96,7 +140,7 @@ export class NlpTranslationLayer {
   }
 
   _parseClause(speaker, clause, context = {}) {
-    const lower = clause.toLowerCase()
+    const lower = reconstructVietnameseTelexSlip(clause).toLowerCase()
     const { intentRegexes, structureRegexes, materialRegexes, templates } = this.bundle
 
     // 1. Target Crusader resolution

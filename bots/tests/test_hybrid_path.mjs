@@ -1,6 +1,6 @@
 // Test Suite for Hybrid Kinematics Kernel (mc_path_core Rust + Node.js Navigator)
 import assert from 'assert'
-import { sliceTrajectory, getNativePathFinder } from '../src/kinematics/navigator.mjs'
+import { sliceTrajectory, getNativePathFinder, PathDaemonClient } from '../src/kinematics/navigator.mjs'
 
 console.log('[*] Testing Hybrid Kinematics (Rust mc_path_core & Node Navigator)...')
 
@@ -66,5 +66,49 @@ for (let i = 0; i < 20; i++) {
   parityPasses++
 }
 console.log(`  [PASS] Gate 5: 20/20 randomized 3D vectors verified`)
+
+// Gate 6: Persistent Unix Socket Daemon (INIT_WORLD, f32 slab/fence A*, and 16-byte SeqLock Spatial Leases) (#27)
+const testSockPath = `/dev/shm/mc-path-test-${process.pid}.sock`
+const daemonClient = new PathDaemonClient({ socketPath: testSockPath })
+try {
+  const initLegacy = await daemonClient.initWorld({ minY: 0, numSections: 16, protocolVersion: 754, worldEpoch: 1 })
+  assert.strictEqual(initLegacy.ok, true)
+  assert.strictEqual(initLegacy.minY, 0)
+  assert.strictEqual(initLegacy.numSections, 16)
+
+  const initModern = await daemonClient.initWorld({ minY: -64, numSections: 24, protocolVersion: 769, worldEpoch: 2 })
+  assert.strictEqual(initModern.ok, true)
+  assert.strictEqual(initModern.minY, -64)
+  assert.strictEqual(initModern.numSections, 24)
+  assert.strictEqual(initModern.worldEpoch, 2)
+
+  // Build a 6x6 floor at y=63, with a bottom slab (nibble 0x3) at (2, 63, 2)
+  for (let x = 0; x < 6; x++) {
+    for (let z = 0; z < 6; z++) {
+      await daemonClient.setClass(x, 63, z, 0x2) // SOLID_CUBE
+    }
+  }
+  await daemonClient.setClass(2, 63, 2, 0x3) // SLAB_BOTTOM
+
+  const f32Res = await daemonClient.findPathF32({ x: 1.2, y: 64.0, z: 2.8 }, { x: 3.7, y: 64.0, z: 2.1 })
+  assert.strictEqual(f32Res.ok, true, 'Daemon ASTAR_F32 must succeed across slab floor')
+  assert.strictEqual(f32Res.path[0].x, 1.5, 'Waypoint X must be block-centered (+0.5)')
+  assert.strictEqual(f32Res.path[0].z, 2.5, 'Waypoint Z must be block-centered (+0.5)')
+  assert.strictEqual(f32Res.path[1].x, 2.5)
+  assert.strictEqual(f32Res.path[1].y, 64.5, 'Slab waypoint Y must include +0.5 sub-block elevation')
+
+  // Spatial lease mutual exclusion & release over Unix socket
+  const l1 = await daemonClient.acquireLease(100, -58, 200, 11, 30)
+  assert.strictEqual(l1.ok, true, 'Agent 11 must acquire spatial lease')
+  const l2 = await daemonClient.acquireLease(100, -58, 200, 22, 30)
+  assert.strictEqual(l2.ok, false, 'Agent 22 must be blocked from active spatial lease')
+  const rel = await daemonClient.releaseLease(100, -58, 200, 11)
+  assert.strictEqual(rel.ok, true, 'Agent 11 must release spatial lease (writes TOMBSTONE)')
+  const l3 = await daemonClient.acquireLease(100, -58, 200, 22, 30)
+  assert.strictEqual(l3.ok, true, 'Agent 22 must acquire reclaimed TOMBSTONE lease slot')
+  console.log('  [PASS] Gate 6: Persistent Unix socket daemon, f32 slab/block-centered waypoints & SeqLock leases verified')
+} finally {
+  daemonClient.close()
+}
 
 console.log('PASS: test_hybrid_path.mjs completed successfully with 0 errors.')

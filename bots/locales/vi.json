@@ -9,7 +9,7 @@
     "BUILD": ["xây", "xay", "dựng", "dung", "làm nhà", "lam nha", "đặt", "dat"],
     "GUARD": ["bảo vệ", "bao ve", "canh gác", "canh gac", "tuần tra", "tuan tra", "đánh", "danh", "tiêu diệt", "tieu diet"],
     "HARVEST": ["thu hoạch", "thu hoach", "trồng", "trong", "chăn nuôi", "chan nuoi", "chặt gỗ", "chat go"],
-    "FEED": ["đói", "doi", "chết đói", "chet doi", "bụng đói", "bung doi", "cho ăn", "cho an", "thức ăn", "thuc an", "đồ ăn", "do an", "bánh mì", "banh mi"],
+    "FEED": ["đói", "doi", "chết đói", "chet doi", "bụng đói", "bung doi", "cho ăn", "cho an", "thức ăn", "thuc an", "đồ ăn", "do an", "bánh mì", "banh mi", "thịt", "thit", "táo", "tao"],
     "SCOUT": ["thám hiểm", "tham hiem", "do thám", "do tham", "trinh sát", "trinh sat"],
     "COME": ["lại đây", "lai day", "tới đây", "toi day", "ở đây", "o day", "theo"],
     "GOTO": ["đi tới", "di toi", "đi đến", "di den"],

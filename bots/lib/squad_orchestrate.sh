@@ -21,14 +21,35 @@ start_squad() {
         "Iggy:scout:The Fool (B/C/D/C/D/C - Scout)"
     )
 
+    local failed_bots=()
     for entry in "${squad_roster[@]}"; do
         IFS=":" read -r bname bpers bstand <<< "${entry}"
         echo " ► Summoning Stand User '${bname}' [${bpers}] (Stand: ${bstand})..."
-        start_bot "${resolved}" "${bname}" "${bpers}"
-        sleep 1
+        local attempt=1
+        local summoned=0
+        while [[ "${attempt}" -le 2 ]]; do
+            if start_bot "${resolved}" "${bname}" "${bpers}"; then
+                summoned=1
+                break
+            fi
+            echo "   [!] Retry ${attempt}/2 for Stand User '${bname}' after 5s backoff..."
+            if stop_bot "${bname}" >/dev/null 2>&1; then
+                :
+            fi
+            sleep 5
+            attempt=$((attempt + 1))
+        done
+        if [[ "${summoned}" -eq 0 ]]; then
+            failed_bots+=("${bname}")
+        fi
+        sleep 4
     done
 
     echo ""
+    if [[ "${#failed_bots[@]}" -gt 0 ]]; then
+        echo "[!] Squad deployed with partial failures: ${failed_bots[*]}" >&2
+        return 1
+    fi
     echo "[+] JoJo Squad fully deployed on ${resolved}!"
     echo "[*] Orchestrator: 'Jotaro' [Star Platinum] (Smartest, Rank A Potential & Precision)"
     echo "[*] Command the squad via: mc-bot squad cmd '<objective>' or mc-bot cmd Jotaro '<goal>'"

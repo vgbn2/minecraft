@@ -20,6 +20,8 @@ import { CombatEvasionController } from '../src/kinematics/combat_evasion.mjs'
 import { TacticalEscapeExcavator } from '../src/kinematics/tactical_escape.mjs'
 import { MotionWatchdog } from '../src/intelligence/motion_watchdog.mjs'
 import { isSquadBot, isHumanPlayer, getNearestHuman, formatEntitySurvey } from '../src/core/player_registry.mjs'
+import { ChatMessageRouter } from '../src/core/chat_router.mjs'
+import { NlpTranslationLayer } from '../src/intelligence/nlp_translator.mjs'
 import {
   CentralDepot,
   checkInventoryCapacity,
@@ -176,7 +178,7 @@ runTest('Plugin loading on bot instance', () => {
 // Gate 4: Command Dispatcher Logic
 // ---------------------------------------------------------------------------
 console.log('\n--- Gate 4: Command Dispatcher Verification ---')
-runTest('Command parsing: !help, !stay, !stop, !status, !mine', () => {
+await runTestAsync('Command parsing: !help, !stay, !stop, !status, !mine', async () => {
   const mockResponses = []
 
   function mockSendResponse(target, text, isWhisper) {
@@ -212,62 +214,70 @@ runTest('Command parsing: !help, !stay, !stop, !status, !mine', () => {
     return false
   }
 
-  function handleMessage(sender, rawMsg, isWhisper, onAiRoute) {
-    let msg = rawMsg.trim()
-    if (!isWhisper) {
-      if (msg.startsWith('!')) {
-        msg = msg.slice(1).trim()
-      } else {
-        const nameRegex = new RegExp(`^@?Companion\\b[:,]?\\s*`, 'i')
-        if (nameRegex.test(msg)) {
-          msg = msg.replace(nameRegex, '').trim()
-        } else {
-          return // ignore
-        }
-      }
-    } else {
-      if (msg.startsWith('!') || msg.startsWith('/')) msg = msg.slice(1).trim()
-    }
-
-    const parts = msg.split(/\s+/)
-    const firstWord = parts[0].toLowerCase()
-    const handled = handleFastCommand(sender, firstWord, parts.slice(1), isWhisper)
-    if (handled) return
-
-    onAiRoute(sender, msg, isWhisper)
-  }
-
   let aiRouted = []
-  const onAi = (s, m, w) => aiRouted.push({ sender: s, msg: m, isWhisper: w })
+  const ipcDispatched = []
+  const nlp = new NlpTranslationLayer()
+
+  const router = new ChatMessageRouter({
+    botName: 'Companion',
+    isMastermind: false,
+    getIsAlive: () => true,
+    isSquadBot: (s, self) => isSquadBot(s, self),
+    sendResponse: mockSendResponse,
+    onFastCommand: async (s, cmd, args, isW) => handleFastCommand(s, cmd, args, isW),
+    onTranslate: () => [],
+    onDispatchIpc: (t, c) => ipcDispatched.push({ target: t, cmd: c }),
+    onAiQuery: (s, m, w) => aiRouted.push({ sender: s, msg: m, isWhisper: w })
+  })
 
   // 1. Test !help
-  handleMessage('Player1', '!help', false, onAi)
+  await router.route('Player1', '!help', false)
   assert.ok(mockResponses.some(r => r.text.includes('Fast cmds')), '!help failed')
 
   // 2. Test !stay
-  handleMessage('Player1', '!stay', false, onAi)
+  await router.route('Player1', '!stay', false)
   assert.ok(mockResponses.some(r => r.text.includes('staying put')), '!stay failed')
 
   // 3. Test !status
-  handleMessage('Player1', '!status', false, onAi)
+  await router.route('Player1', '!status', false)
   assert.ok(mockResponses.some(r => r.text.includes('Health: 20/20')), '!status failed')
 
   // 4. Test !mine iron_ore 3
-  handleMessage('Player1', '!mine iron_ore 3', false, onAi)
+  await router.route('Player1', '!mine iron_ore 3', false)
   assert.ok(mockResponses.some(r => r.text.includes('Mining 3 iron_ore(s)')), '!mine failed')
 
   // 5. Test whisper /tell Companion come (must NOT route to AI)
-  handleMessage('Player1', 'come', true, onAi)
+  await router.route('Player1', 'come', true)
   assert.strictEqual(aiRouted.length, 0, 'Whisper fast command must NOT route to AI')
 
   // 6. Test public mention @Companion stay (must NOT route to AI)
-  handleMessage('Player1', '@Companion stay', false, onAi)
+  await router.route('Player1', '@Companion stay', false)
   assert.strictEqual(aiRouted.length, 0, 'Mentioned fast command must NOT route to AI')
 
   // 7. Test unhandled message -> triggers AI
-  handleMessage('Player1', '@Companion what should we build next?', false, onAi)
+  await router.route('Player1', '@Companion what should we build next?', false)
   assert.strictEqual(aiRouted.length, 1, 'Unhandled message must route to AI')
   assert.strictEqual(aiRouted[0].msg, 'what should we build next?')
+
+  // 8. Test Mastermind Jotaro Ambient Gate (un-prefixed human chat + Telex slip "im hủngey")
+  const mastermindRouter = new ChatMessageRouter({
+    botName: 'Jotaro',
+    isMastermind: true,
+    getIsAlive: () => true,
+    isSquadBot: (s, self) => isSquadBot(s, self),
+    sendResponse: mockSendResponse,
+    onFastCommand: async (s, cmd, args, isW) => handleFastCommand(s, cmd, args, isW),
+    onTranslate: (s, m) => nlp.translate(s, m),
+    onDispatchIpc: (t, c) => ipcDispatched.push({ target: t, cmd: c }),
+    onAiQuery: (s, m, w) => aiRouted.push({ sender: s, msg: m, isWhisper: w })
+  })
+  await mastermindRouter.route('vgbn', 'im hủngey', false)
+  assert.ok(
+    ipcDispatched.some(d => d.target === 'Kakyoin' && d.cmd === '!feed vgbn'),
+    'Mastermind ambient chat "im hủngey" must dispatch !feed vgbn to Kakyoin'
+  )
+  await mastermindRouter.route('vgbn', 'random ambient chatter with no intent', false)
+  assert.strictEqual(aiRouted.length, 1, 'Ambient chatter without explicit intent must NOT fall through to LLM query')
 })
 
 // ---------------------------------------------------------------------------

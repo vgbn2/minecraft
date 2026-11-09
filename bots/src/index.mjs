@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { Vec3 } from 'vec3'
 import { createBotInstance } from './core/client.mjs'
 import { IpcManager } from './core/ipc.mjs'
+import { ChatMessageRouter } from './core/chat_router.mjs'
 import { AIAgent } from './intelligence/ai_agent.mjs'
 import { PrompterSupervisor } from './intelligence/supervisor.mjs'
 import { SafeHopNavigator } from './kinematics/navigator.mjs'
@@ -77,17 +78,32 @@ const version = process.env.MC_VERSION || false
 const personalityKey = (process.env.MC_BOT_PERSONALITY || config.personality || 'companion').toLowerCase()
 export const personality = PERSONALITIES[personalityKey] || PERSONALITIES.companion
 
-// ponytail: swap-backed logging monitor; auto-truncates to 0 if log reaches 1GB ceiling
+// ponytail: O_APPEND-safe same-inode tail rewind; caps log at 4MB while preserving latest 256KB crash tail
 const LOG_FILE = process.env.MC_LOG_FILE || `/dev/shm/mc-bot/${username}.log`
-const MAX_LOG_BYTES = 1024 * 1024 * 1024 // 1GB
+export const MAX_LOG_BYTES = 4 * 1024 * 1024 // 4MB
+export const KEEP_LOG_TAIL_BYTES = 256 * 1024 // 256KB
+
+export function rewindLogFileInPlace(logFile = LOG_FILE, maxBytes = MAX_LOG_BYTES, keepBytes = KEEP_LOG_TAIL_BYTES) {
+  if (!logFile || !fs.existsSync(logFile)) return false
+  const stats = fs.statSync(logFile)
+  if (stats.size < maxBytes) return false
+  const actualKeep = Math.min(keepBytes, stats.size)
+  const fd = fs.openSync(logFile, 'r+')
+  try {
+    const buf = Buffer.allocUnsafe(actualKeep)
+    const bytesRead = fs.readSync(fd, buf, 0, actualKeep, stats.size - actualKeep)
+    fs.writeSync(fd, buf, 0, bytesRead, 0)
+    fs.ftruncateSync(fd, bytesRead)
+    return true
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
 setInterval(() => {
   try {
-    if (fs.existsSync(LOG_FILE)) {
-      const stats = fs.statSync(LOG_FILE)
-      if (stats.size >= MAX_LOG_BYTES) {
-        fs.truncateSync(LOG_FILE, 0)
-        console.log(`[!] Log reached 1GB ceiling; automatically flushed in /dev/shm/mc-bot/`)
-      }
+    if (rewindLogFileInPlace(LOG_FILE, MAX_LOG_BYTES, KEEP_LOG_TAIL_BYTES)) {
+      console.log(`[!] Log reached 4MB ceiling; rewound in-place to latest 256KB in /dev/shm/mc-bot/`)
     }
   } catch {}
 }, 30000).unref()
@@ -612,69 +628,80 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
   return false
 }
 
-// 7. Inbound Chat Router
+// 7. Inbound Chat Router (delegated to ChatMessageRouter for ambient commander gate & DI testing)
+export const chatRouter = new ChatMessageRouter({
+  botName: username || bot.username || 'Companion',
+  isMastermind: Boolean(personality?.smartest || personality?.role === 'commander'),
+  getIsAlive: () => Boolean(bot.entity && bot.isAlive && (bot.health === undefined || bot.health > 0)),
+  isSquadBot: (sender, selfName) => isSquadBot(sender, selfName),
+  sendResponse,
+  onSlashCommand: (slashCmd) => {
+    console.log(`[SLASH CMD] Dispatching in-game slash command: ${slashCmd}`)
+    bot.chat(slashCmd)
+  },
+  onFastCommand: (sender, cmd, args, isWhisper) => handleFastCommand(sender, cmd, args, isWhisper),
+  onTranslate: (sender, msg) => supervisor.translateNaturalLanguage(sender, msg),
+  onDispatchIpc: (targetAgent, cmd) => IpcManager.dispatchCommand(targetAgent, cmd),
+  onAiQuery: (sender, msg, isWhisper) => aiAgent.query(sender, msg, isWhisper)
+})
+
 export function handleMessage(sender, rawMessage, isWhisper, isIpc = false) {
-  const botName = username || bot.username || 'Companion'
-  if (sender === botName || !bot.entity) return
-  // Prevent echo loops: squad bots ignore each other's public chat unless via whisper or IPC
-  if (!isWhisper && !isIpc && isSquadBot(sender, botName)) return
-  if (!bot.isAlive || (bot.health !== undefined && bot.health <= 0)) {
-    sendResponse(sender, "I'm currently respawning, please wait a moment!", isWhisper)
-    return
-  }
-  let msg = rawMessage.trim()
-  console.log(`[CHAT IN] [${isWhisper ? 'WHISPER' : 'PUBLIC'}] <${sender}>: ${msg}`)
-
-  let isPrefixed = false
-  if (!isWhisper && !isIpc) {
-    if (msg.startsWith('!')) {
-      isPrefixed = true
-      msg = msg.slice(1).trim()
-    } else {
-      const nameRegex = new RegExp(`^@?${botName}\\b[:,]?\\s*`, 'i')
-      if (nameRegex.test(msg)) {
-        msg = msg.replace(nameRegex, '').trim()
-      } else {
-        return
-      }
-    }
-  } else {
-    if (rawMessage.trim().startsWith('/')) {
-      console.log(`[SLASH CMD] Dispatching in-game slash command: ${rawMessage.trim()}`)
-      bot.chat(rawMessage.trim())
-      return
-    }
-    if (msg.startsWith('!') || msg.startsWith('/')) {
-      msg = msg.slice(1).trim()
-    }
-  }
-
-  const parts = msg.split(/\s+/)
-  const firstWord = parts[0].toLowerCase()
-
-  handleFastCommand(sender, firstWord, parts.slice(1), isWhisper).then(async handled => {
-    if (handled) return
-    const translated = supervisor.translateNaturalLanguage(sender, msg)
-    if (translated.some(a => a.intent !== 'UNKNOWN')) {
-      for (const action of translated) {
-        if (action.intent === 'UNKNOWN') continue
-        const targetLower = action.targetAgent.toLowerCase()
-        if (targetLower === botName.toLowerCase() || targetLower === 'all') {
-          const cleanCmd = action.command.replace(/^[!/]/, '').trim()
-          const cmdParts = cleanCmd.split(/\s+/)
-          await handleFastCommand(sender, cmdParts[0].toLowerCase(), cmdParts.slice(1), isWhisper)
-        }
-        if (targetLower !== botName.toLowerCase()) {
-          IpcManager.dispatchCommand(action.targetAgent, action.command)
-          sendResponse(sender, action.tacticalBrief, isWhisper)
-        }
-      }
-      return
-    }
-    aiAgent.query(sender, msg, isWhisper)
-  }).catch(err => {
-    console.error('[!] Error in handleFastCommand:', err)
+  if (!bot.entity && !isIpc) return
+  chatRouter.botName = username || bot.username || 'Companion'
+  console.log(`[CHAT IN] [${isWhisper ? 'WHISPER' : 'PUBLIC'}] <${sender}>: ${String(rawMessage || '').trim()}`)
+  return chatRouter.route(sender, rawMessage, isWhisper, isIpc).catch(err => {
+    console.error('[!] Error in chatRouter:', err)
   })
+}
+
+export function createBotAgentInstance(opts = {}) {
+  const instName = opts.username || 'Citizen_1'
+  const instRole = (opts.personalityKey || opts.role || 'companion').toLowerCase()
+  const instPersonality = PERSONALITIES[instRole] || PERSONALITIES.companion || personality
+  const createFn = opts.createBotFn || createBotInstance
+  const instBot = createFn({
+    host: opts.host || host,
+    port: opts.port || port,
+    username: instName,
+    version: opts.version ?? version,
+    viewDistance: opts.viewDistance || 2,
+    lightweight: opts.lightweight ?? true,
+    storageBuilder: opts.storageBuilder || null
+  })
+  const instSupervisor = new PrompterSupervisor({ bot: instBot, language: config.language || 'auto' })
+  const instRouter = new ChatMessageRouter({
+    botName: instName,
+    isMastermind: Boolean(instPersonality?.smartest || instPersonality?.role === 'commander'),
+    getIsAlive: () => Boolean(instBot.entity && instBot.isAlive !== false && (instBot.health === undefined || instBot.health > 0)),
+    isSquadBot: (s, self) => isSquadBot(s, self),
+    sendResponse: (target, message, isW) => {
+      if (!message) return
+      const clean = String(message).replace(/[\n\r]+/g, ' ').slice(0, 100)
+      try { isW && target ? instBot.whisper(target, clean) : instBot.chat(clean) } catch {}
+    },
+    onSlashCommand: (c) => { try { instBot.chat(c) } catch {} },
+    onFastCommand: opts.onFastCommand || (async () => false),
+    onTranslate: (s, m) => instSupervisor.translateNaturalLanguage(s, m),
+    onDispatchIpc: (t, c) => IpcManager.dispatchCommand(t, c, opts.ipcBaseDir),
+    onAiQuery: opts.onAiQuery || (() => {})
+  })
+  const instIpc = opts.enableIpc !== false
+    ? new IpcManager(instName, (s, m, w, ipcFlag) => instRouter.route(s, m, w, ipcFlag), { baseDir: opts.ipcBaseDir })
+    : null
+  if (instIpc && opts.startIpc) instIpc.start()
+
+  return {
+    username: instName,
+    personality: instPersonality,
+    bot: instBot,
+    supervisor: instSupervisor,
+    chatRouter: instRouter,
+    ipc: instIpc,
+    stop() {
+      if (instIpc) instIpc.stop()
+      try { instBot.quit?.() } catch {}
+    }
+  }
 }
 
 // 8. Bot Lifecycle Events

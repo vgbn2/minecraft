@@ -1,9 +1,154 @@
 use mc_path_core::{
-    astar_search, check_motion, generate_deconstruction_plan, is_human_player, is_squad_bot,
-    slice_trajectory, BotMode, FVec3, IVec3, SimpleVoxelWorld,
+    astar_search, astar_search_f32, check_motion, generate_deconstruction_plan, is_human_player,
+    is_squad_bot, slice_trajectory, BotMode, FVec3, IVec3, SimpleVoxelWorld, SpatialLeaseTable,
+    VoxelMovementClass, WorldHeader,
 };
 use std::env;
-use std::time::Instant;
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::{Arc, RwLock};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+fn handle_daemon_stream(
+    stream: UnixStream,
+    world: Arc<RwLock<SimpleVoxelWorld>>,
+    leases: Arc<SpatialLeaseTable>,
+) {
+    let reader_stream = match stream.try_clone() {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let mut reader = BufReader::new(reader_stream);
+    let mut writer = stream;
+    let mut line = String::new();
+
+    while reader.read_line(&mut line).unwrap_or(0) > 0 {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            line.clear();
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        let cmd = parts[0].to_uppercase();
+        let resp = match cmd.as_str() {
+            "PING" => "{\"ok\":true,\"pong\":true}\n".to_string(),
+            "INIT_WORLD" if parts.len() >= 5 => {
+                let min_y = parts[1].parse::<i16>().unwrap_or(-64);
+                let num_sections = parts[2].parse::<u16>().unwrap_or(24);
+                let proto = parts[3].parse::<i32>().unwrap_or(769);
+                let epoch = parts[4].parse::<u32>().unwrap_or(1);
+                if let Ok(mut w) = world.write() {
+                    w.header = WorldHeader {
+                        min_y,
+                        num_sections,
+                        protocol_version: proto,
+                        world_epoch: epoch,
+                    };
+                }
+                format!(
+                    "{{\"ok\":true,\"minY\":{},\"numSections\":{},\"protocolVersion\":{},\"worldEpoch\":{}}}\n",
+                    min_y, num_sections, proto, epoch
+                )
+            }
+            "SET_CLASS" if parts.len() >= 5 => {
+                let x = parts[1].parse::<i32>().unwrap_or(0);
+                let y = parts[2].parse::<i32>().unwrap_or(0);
+                let z = parts[3].parse::<i32>().unwrap_or(0);
+                let nibble = parts[4].parse::<u8>().unwrap_or(2);
+                if let Ok(mut w) = world.write() {
+                    w.set_class(IVec3::new(x, y, z), VoxelMovementClass::from_nibble(nibble));
+                }
+                "{\"ok\":true}\n".to_string()
+            }
+            "SLICE" if parts.len() >= 7 => {
+                let x1 = parts[1].parse::<i32>().unwrap_or(0);
+                let y1 = parts[2].parse::<i32>().unwrap_or(0);
+                let z1 = parts[3].parse::<i32>().unwrap_or(0);
+                let x2 = parts[4].parse::<i32>().unwrap_or(0);
+                let y2 = parts[5].parse::<i32>().unwrap_or(0);
+                let z2 = parts[6].parse::<i32>().unwrap_or(0);
+                let max_hop = if parts.len() >= 8 {
+                    parts[7].parse::<f64>().unwrap_or(16.0)
+                } else {
+                    16.0
+                };
+                let hops = slice_trajectory(IVec3::new(x1, y1, z1), IVec3::new(x2, y2, z2), max_hop);
+                let total = hops.len();
+                let items: Vec<String> = hops
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, h)| {
+                        format!(
+                            "{{\"x\":{},\"y\":{},\"z\":{},\"hopIndex\":{},\"totalHops\":{}}}",
+                            h.x,
+                            h.y,
+                            h.z,
+                            idx + 1,
+                            total
+                        )
+                    })
+                    .collect();
+                format!("[{}]\n", items.join(","))
+            }
+            "ASTAR_F32" if parts.len() >= 7 => {
+                let x1 = parts[1].parse::<f64>().unwrap_or(0.0);
+                let y1 = parts[2].parse::<f64>().unwrap_or(0.0);
+                let z1 = parts[3].parse::<f64>().unwrap_or(0.0);
+                let x2 = parts[4].parse::<f64>().unwrap_or(0.0);
+                let y2 = parts[5].parse::<f64>().unwrap_or(0.0);
+                let z2 = parts[6].parse::<f64>().unwrap_or(0.0);
+                let max_eval = if parts.len() >= 8 {
+                    parts[7].parse::<usize>().unwrap_or(10_000)
+                } else {
+                    10_000
+                };
+                let res = if let Ok(w) = world.read() {
+                    astar_search_f32(&*w, FVec3::new(x1, y1, z1), FVec3::new(x2, y2, z2), max_eval)
+                } else {
+                    None
+                };
+                match res {
+                    Some(pts) => {
+                        let items: Vec<String> = pts
+                            .iter()
+                            .map(|p| format!("{{\"x\":{:.1},\"y\":{:.1},\"z\":{:.1}}}", p.x, p.y, p.z))
+                            .collect();
+                        format!("{{\"ok\":true,\"path\":[{}]}}\n", items.join(","))
+                    }
+                    None => "{\"ok\":false,\"path\":null}\n".to_string(),
+                }
+            }
+            "LEASE_ACQUIRE" if parts.len() >= 6 => {
+                let x = parts[1].parse::<i32>().unwrap_or(0);
+                let y = parts[2].parse::<i32>().unwrap_or(0);
+                let z = parts[3].parse::<i32>().unwrap_or(0);
+                let agent = parts[4].parse::<u16>().unwrap_or(1);
+                let ttl = parts[5].parse::<u32>().unwrap_or(30);
+                let now_sec = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs() as u32)
+                    .unwrap_or(1000);
+                let ok = leases.acquire(IVec3::new(x, y, z), agent, now_sec, ttl);
+                format!("{{\"ok\":{}}}\n", ok)
+            }
+            "LEASE_RELEASE" if parts.len() >= 5 => {
+                let x = parts[1].parse::<i32>().unwrap_or(0);
+                let y = parts[2].parse::<i32>().unwrap_or(0);
+                let z = parts[3].parse::<i32>().unwrap_or(0);
+                let agent = parts[4].parse::<u16>().unwrap_or(1);
+                let ok = leases.release(IVec3::new(x, y, z), agent);
+                format!("{{\"ok\":{}}}\n", ok)
+            }
+            _ => "{\"ok\":false,\"error\":\"invalid_command\"}\n".to_string(),
+        };
+        if writer.write_all(resp.as_bytes()).is_err() {
+            break;
+        }
+        let _ = writer.flush();
+        line.clear();
+    }
+}
 
 fn print_usage() {
     eprintln!("mc-path-fast: High-Performance Native 3D Voxel Pathfinding & Kinematics Engine");
@@ -184,6 +329,27 @@ fn main() {
             println!("  • Average Search Duration: {:.2} µs ({:.3} ms)", avg_time_us, avg_time_us / 1000.0);
             println!("  • Trajectory Searches / Sec: {} searches/sec", searches_per_sec);
             println!("  • Average Waypoints Generated: {} nodes", total_path_len / iters.max(1));
+        }
+        "--daemon" | "daemon" => {
+            let sock_path = if args.len() >= 3 {
+                args[2].clone()
+            } else {
+                env::var("MC_PATH_SOCK").unwrap_or_else(|_| "/dev/shm/mc-path.sock".to_string())
+            };
+            let _ = fs::remove_file(&sock_path);
+            let listener = UnixListener::bind(&sock_path).unwrap_or_else(|e| {
+                eprintln!("Failed to bind Unix socket {}: {}", sock_path, e);
+                std::process::exit(1);
+            });
+            let world = Arc::new(RwLock::new(SimpleVoxelWorld::new()));
+            let leases = Arc::new(SpatialLeaseTable::new());
+            println!("{{\"ready\":true,\"socket\":\"{}\"}}", sock_path);
+            let _ = std::io::stdout().flush();
+            for stream in listener.incoming().flatten() {
+                let w = Arc::clone(&world);
+                let l = Arc::clone(&leases);
+                std::thread::spawn(move || handle_daemon_stream(stream, w, l));
+            }
         }
         "--version" | "-v" => {
             println!("mc-path-fast 0.1.0 (native Rust 3D voxel kinematics engine)");

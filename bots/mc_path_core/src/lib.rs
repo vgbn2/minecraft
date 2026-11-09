@@ -4,6 +4,80 @@ use std::collections::{BinaryHeap, HashMap};
 
 pub const MAX_SAFE_HOP_DISTANCE: f64 = 16.0;
 
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VoxelMovementClass {
+    UnloadedUnknown = 0x0,
+    AirPassable = 0x1,
+    SolidCube = 0x2,
+    SlabBottom = 0x3,
+    Stairs = 0x4,
+    FenceWall = 0x5,
+    DoorGateOpen = 0x6,
+    WaterFlow = 0x7,
+    Climbable = 0x8,
+    LeafCanopy = 0x9,
+    HazardAvoid = 0xA,
+    CarpetLow = 0xB,
+    HazardImpassable = 0xC,
+}
+
+impl VoxelMovementClass {
+    #[inline(always)]
+    pub fn from_nibble(nibble: u8) -> Self {
+        match nibble & 0x0F {
+            0x0 => Self::UnloadedUnknown,
+            0x1 => Self::AirPassable,
+            0x2 => Self::SolidCube,
+            0x3 => Self::SlabBottom,
+            0x4 => Self::Stairs,
+            0x5 => Self::FenceWall,
+            0x6 => Self::DoorGateOpen,
+            0x7 => Self::WaterFlow,
+            0x8 => Self::Climbable,
+            0x9 => Self::LeafCanopy,
+            0xA => Self::HazardAvoid,
+            0xB => Self::CarpetLow,
+            _ => Self::HazardImpassable,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorldHeader {
+    pub min_y: i16,
+    pub num_sections: u16,
+    pub protocol_version: i32,
+    pub world_epoch: u32,
+}
+
+impl Default for WorldHeader {
+    fn default() -> Self {
+        Self {
+            min_y: -64,
+            num_sections: 24,
+            protocol_version: 769,
+            world_epoch: 1,
+        }
+    }
+}
+
+impl WorldHeader {
+    #[inline(always)]
+    pub fn max_y(&self) -> i32 {
+        (self.min_y as i32) + (self.num_sections as i32) * 16 - 1
+    }
+
+    #[inline(always)]
+    pub fn section_index(&self, y: i32) -> Option<usize> {
+        let min_y = self.min_y as i32;
+        if y < min_y || y > self.max_y() {
+            return None;
+        }
+        Some(((y - min_y) >> 4) as usize)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct IVec3 {
     pub x: i32,
@@ -36,12 +110,25 @@ pub trait VoxelWorld {
     fn is_solid(&self, pos: &IVec3) -> bool;
     fn is_passable(&self, pos: &IVec3) -> bool;
     fn is_leaf(&self, pos: &IVec3) -> bool;
+    fn movement_class(&self, pos: &IVec3) -> VoxelMovementClass {
+        if self.is_leaf(pos) {
+            VoxelMovementClass::LeafCanopy
+        } else if self.is_solid(pos) {
+            VoxelMovementClass::SolidCube
+        } else if self.is_passable(pos) {
+            VoxelMovementClass::AirPassable
+        } else {
+            VoxelMovementClass::UnloadedUnknown
+        }
+    }
 }
 
 /// Simple in-memory world representation for tests and micro-benchmarks
 pub struct SimpleVoxelWorld {
     pub solid_blocks: std::collections::HashSet<IVec3>,
     pub leaf_blocks: std::collections::HashSet<IVec3>,
+    pub class_overrides: std::collections::HashMap<IVec3, VoxelMovementClass>,
+    pub header: WorldHeader,
 }
 
 impl SimpleVoxelWorld {
@@ -49,6 +136,8 @@ impl SimpleVoxelWorld {
         Self {
             solid_blocks: std::collections::HashSet::new(),
             leaf_blocks: std::collections::HashSet::new(),
+            class_overrides: std::collections::HashMap::new(),
+            header: WorldHeader::default(),
         }
     }
 
@@ -68,22 +157,91 @@ impl SimpleVoxelWorld {
             self.leaf_blocks.remove(&pos);
         }
     }
+
+    pub fn set_class(&mut self, pos: IVec3, class: VoxelMovementClass) {
+        self.class_overrides.insert(pos, class);
+        match class {
+            VoxelMovementClass::SolidCube
+            | VoxelMovementClass::SlabBottom
+            | VoxelMovementClass::Stairs
+            | VoxelMovementClass::FenceWall => {
+                self.solid_blocks.insert(pos);
+            }
+            VoxelMovementClass::LeafCanopy => {
+                self.leaf_blocks.insert(pos);
+                self.solid_blocks.insert(pos);
+            }
+            VoxelMovementClass::AirPassable
+            | VoxelMovementClass::DoorGateOpen
+            | VoxelMovementClass::WaterFlow
+            | VoxelMovementClass::Climbable
+            | VoxelMovementClass::CarpetLow => {
+                self.solid_blocks.remove(&pos);
+                self.leaf_blocks.remove(&pos);
+            }
+            VoxelMovementClass::UnloadedUnknown
+            | VoxelMovementClass::HazardAvoid
+            | VoxelMovementClass::HazardImpassable => {
+                self.solid_blocks.remove(&pos);
+            }
+        }
+    }
 }
 
 impl VoxelWorld for SimpleVoxelWorld {
     #[inline(always)]
     fn is_solid(&self, pos: &IVec3) -> bool {
-        self.solid_blocks.contains(pos)
+        if let Some(&cls) = self.class_overrides.get(pos) {
+            matches!(
+                cls,
+                VoxelMovementClass::SolidCube
+                    | VoxelMovementClass::SlabBottom
+                    | VoxelMovementClass::Stairs
+                    | VoxelMovementClass::FenceWall
+                    | VoxelMovementClass::LeafCanopy
+            )
+        } else {
+            self.solid_blocks.contains(pos)
+        }
     }
 
     #[inline(always)]
     fn is_passable(&self, pos: &IVec3) -> bool {
-        !self.solid_blocks.contains(pos)
+        if let Some(&cls) = self.class_overrides.get(pos) {
+            matches!(
+                cls,
+                VoxelMovementClass::AirPassable
+                    | VoxelMovementClass::DoorGateOpen
+                    | VoxelMovementClass::WaterFlow
+                    | VoxelMovementClass::Climbable
+                    | VoxelMovementClass::CarpetLow
+            )
+        } else {
+            !self.solid_blocks.contains(pos)
+        }
     }
 
     #[inline(always)]
     fn is_leaf(&self, pos: &IVec3) -> bool {
-        self.leaf_blocks.contains(pos)
+        if let Some(&cls) = self.class_overrides.get(pos) {
+            cls == VoxelMovementClass::LeafCanopy
+        } else {
+            self.leaf_blocks.contains(pos)
+        }
+    }
+
+    #[inline(always)]
+    fn movement_class(&self, pos: &IVec3) -> VoxelMovementClass {
+        if let Some(&cls) = self.class_overrides.get(pos) {
+            return cls;
+        }
+        if self.leaf_blocks.contains(pos) {
+            VoxelMovementClass::LeafCanopy
+        } else if self.solid_blocks.contains(pos) {
+            VoxelMovementClass::SolidCube
+        } else {
+            VoxelMovementClass::AirPassable
+        }
     }
 }
 
@@ -261,23 +419,46 @@ fn try_expand_step<W: VoxelWorld>(
     goal: &IVec3,
 ) {
     // Kinematic constraints:
-    // 1. Ground below feet must be solid
+    // 1. Ground below feet must be solid and NOT a 1.5m FenceWall when stepping up
     let ground = IVec3::new(to.x, to.y - 1, to.z);
+    let ground_class = world.movement_class(&ground);
     if !world.is_solid(&ground) {
+        return;
+    }
+    if ground_class == VoxelMovementClass::FenceWall {
         return;
     }
 
     // 2. Feet and head voxels must be passable (0.6x1.8m bounding box clearance)
     let feet = to;
     let head = IVec3::new(to.x, to.y + 1, to.z);
+    let feet_class = world.movement_class(&feet);
+    let head_class = world.movement_class(&head);
+    if feet_class == VoxelMovementClass::UnloadedUnknown
+        || feet_class == VoxelMovementClass::HazardImpassable
+        || head_class == VoxelMovementClass::UnloadedUnknown
+        || head_class == VoxelMovementClass::HazardImpassable
+    {
+        return;
+    }
     if !world.is_passable(&feet) || !world.is_passable(&head) {
         return;
     }
 
-    // 3. Tree Canopy Penalty: heavily disincentivize routing across leaves
+    // 3. Tree Canopy & Movement Class Cost Adjustments
     let mut total_cost = base_cost;
-    if world.is_leaf(&ground) {
+    if world.is_leaf(&ground) || ground_class == VoxelMovementClass::LeafCanopy {
         total_cost += 5000;
+    } else if (ground_class == VoxelMovementClass::SlabBottom
+        || ground_class == VoxelMovementClass::Stairs)
+        && to.y > from.y
+        && total_cost >= 250
+    {
+        // Slab / stair step-up needs no 1.25m jump impulse
+        total_cost -= 250;
+    }
+    if feet_class == VoxelMovementClass::WaterFlow {
+        total_cost += 800;
     }
 
     let tentative_g = g_score.get(&from).unwrap_or(&0) + total_cost;
@@ -290,6 +471,215 @@ fn try_expand_step<W: VoxelWorld>(
             g_cost: tentative_g,
             f_cost: f,
         });
+    }
+}
+
+/// 3D Voxel A* returning block-centered (+0.5) and sub-block slab/stair elevated (+0.5) floating-point waypoints
+pub fn astar_search_f32<W: VoxelWorld>(
+    world: &W,
+    start: FVec3,
+    goal: FVec3,
+    max_evaluations: usize,
+) -> Option<Vec<FVec3>> {
+    let start_i = start.floored();
+    let goal_i = goal.floored();
+    let raw_path = astar_search(world, start_i, goal_i, max_evaluations)?;
+    let mut out = Vec::with_capacity(raw_path.len());
+    for node in raw_path {
+        let ground = IVec3::new(node.x, node.y - 1, node.z);
+        let ground_class = world.movement_class(&ground);
+        let y_offset = if ground_class == VoxelMovementClass::SlabBottom
+            || ground_class == VoxelMovementClass::Stairs
+        {
+            0.5
+        } else {
+            0.0
+        };
+        out.push(FVec3::new(
+            node.x as f64 + 0.5,
+            node.y as f64 + y_offset,
+            node.z as f64 + 0.5,
+        ));
+    }
+    Some(out)
+}
+
+// --- 16-Byte SeqLock + TOMBSTONE Spatial Lease Table (1024 slots = 16 KB) ---
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+
+pub const LEASE_TABLE_SLOTS: usize = 1024;
+pub const LEASE_EMPTY_COORD: u64 = 0;
+pub const LEASE_TOMBSTONE_COORD: u64 = u64::MAX - 1;
+
+#[repr(C)]
+pub struct LeaseSlot {
+    pub meta: AtomicU64,  // (seq: u16 [even=valid, odd=writing] << 48) | (agent_id: u16 << 32) | (expiry_sec: u32)
+    pub coord: AtomicU64, // packed non-zero 3D coordinate or LEASE_EMPTY_COORD / LEASE_TOMBSTONE_COORD
+}
+
+impl Default for LeaseSlot {
+    fn default() -> Self {
+        Self {
+            meta: AtomicU64::new(0),
+            coord: AtomicU64::new(LEASE_EMPTY_COORD),
+        }
+    }
+}
+
+pub struct SpatialLeaseTable {
+    pub slots: Box<[LeaseSlot; LEASE_TABLE_SLOTS]>,
+}
+
+impl Default for SpatialLeaseTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SpatialLeaseTable {
+    pub fn new() -> Self {
+        let mut vec = Vec::with_capacity(LEASE_TABLE_SLOTS);
+        for _ in 0..LEASE_TABLE_SLOTS {
+            vec.push(LeaseSlot::default());
+        }
+        let boxed_slice = vec.into_boxed_slice();
+        let slots = match boxed_slice.try_into() {
+            Ok(arr) => arr,
+            Err(_) => unreachable!(),
+        };
+        Self { slots }
+    }
+
+    #[inline(always)]
+    pub fn pack_coord(pos: IVec3) -> u64 {
+        let ux = ((pos.x + (1 << 20)) as u64) & 0x1F_FFFF; // 21 bits
+        let uy = ((pos.y + 2048) as u64) & 0xFFF;          // 12 bits
+        let uz = ((pos.z + (1 << 20)) as u64) & 0x1F_FFFF; // 21 bits
+        (1u64 << 63) | (ux << 33) | (uy << 21) | uz
+    }
+
+    #[inline(always)]
+    fn hash_coord(packed: u64) -> usize {
+        ((packed.wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> 54) as usize & (LEASE_TABLE_SLOTS - 1)
+    }
+
+    pub fn acquire(&self, pos: IVec3, agent_id: u16, now_sec: u32, ttl_sec: u32) -> bool {
+        let target_coord = Self::pack_coord(pos);
+        let start_idx = Self::hash_coord(target_coord);
+        let expiry = now_sec.saturating_add(ttl_sec.max(1));
+        let mut first_reclaimable: Option<usize> = None;
+
+        for step in 0..LEASE_TABLE_SLOTS {
+            let idx = (start_idx + step) & (LEASE_TABLE_SLOTS - 1);
+            let slot = &self.slots[idx];
+
+            let (meta, coord) = Self::read_seqlock(slot);
+            if coord == LEASE_EMPTY_COORD {
+                let target_idx = first_reclaimable.unwrap_or(idx);
+                return Self::write_seqlock(&self.slots[target_idx], agent_id, expiry, target_coord);
+            }
+            if coord == LEASE_TOMBSTONE_COORD {
+                if first_reclaimable.is_none() {
+                    first_reclaimable = Some(idx);
+                }
+                continue;
+            }
+            let slot_expiry = (meta & 0xFFFF_FFFF) as u32;
+            let slot_agent = ((meta >> 32) & 0xFFFF) as u16;
+            if now_sec >= slot_expiry {
+                if first_reclaimable.is_none() {
+                    first_reclaimable = Some(idx);
+                }
+                if coord == target_coord {
+                    return Self::write_seqlock(slot, agent_id, expiry, target_coord);
+                }
+                continue;
+            }
+            if coord == target_coord {
+                if slot_agent == agent_id {
+                    return Self::write_seqlock(slot, agent_id, expiry, target_coord);
+                }
+                return false; // Held by another active agent
+            }
+        }
+
+        if let Some(target_idx) = first_reclaimable {
+            return Self::write_seqlock(&self.slots[target_idx], agent_id, expiry, target_coord);
+        }
+        false
+    }
+
+    pub fn release(&self, pos: IVec3, agent_id: u16) -> bool {
+        let target_coord = Self::pack_coord(pos);
+        let start_idx = Self::hash_coord(target_coord);
+
+        for step in 0..LEASE_TABLE_SLOTS {
+            let idx = (start_idx + step) & (LEASE_TABLE_SLOTS - 1);
+            let slot = &self.slots[idx];
+            let (meta, coord) = Self::read_seqlock(slot);
+            if coord == LEASE_EMPTY_COORD {
+                return false;
+            }
+            if coord == target_coord {
+                let slot_agent = ((meta >> 32) & 0xFFFF) as u16;
+                if slot_agent != agent_id {
+                    return false;
+                }
+                return Self::write_seqlock(slot, 0, 0, LEASE_TOMBSTONE_COORD);
+            }
+        }
+        false
+    }
+
+    pub fn owner_of(&self, pos: IVec3, now_sec: u32) -> Option<u16> {
+        let target_coord = Self::pack_coord(pos);
+        let start_idx = Self::hash_coord(target_coord);
+
+        for step in 0..LEASE_TABLE_SLOTS {
+            let idx = (start_idx + step) & (LEASE_TABLE_SLOTS - 1);
+            let slot = &self.slots[idx];
+            let (meta, coord) = Self::read_seqlock(slot);
+            if coord == LEASE_EMPTY_COORD {
+                return None;
+            }
+            if coord == target_coord {
+                let slot_expiry = (meta & 0xFFFF_FFFF) as u32;
+                if now_sec < slot_expiry {
+                    return Some(((meta >> 32) & 0xFFFF) as u16);
+                }
+                return None;
+            }
+        }
+        None
+    }
+
+    #[inline(always)]
+    fn read_seqlock(slot: &LeaseSlot) -> (u64, u64) {
+        loop {
+            let m1 = slot.meta.load(AtomicOrdering::Acquire);
+            if ((m1 >> 48) & 1) != 0 {
+                std::hint::spin_loop();
+                continue;
+            }
+            let c = slot.coord.load(AtomicOrdering::Acquire);
+            let m2 = slot.meta.load(AtomicOrdering::Acquire);
+            if m1 == m2 {
+                return (m1, c);
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn write_seqlock(slot: &LeaseSlot, agent_id: u16, expiry_sec: u32, coord: u64) -> bool {
+        let prev = slot.meta.load(AtomicOrdering::Acquire);
+        let seq = ((prev >> 48) as u16).wrapping_add(1) | 1; // Odd = writing
+        let odd_meta = ((seq as u64) << 48) | ((agent_id as u64) << 32) | (expiry_sec as u64);
+        slot.meta.store(odd_meta, AtomicOrdering::Release);
+        slot.coord.store(coord, AtomicOrdering::Release);
+        let even_seq = seq.wrapping_add(1); // Even = valid
+        let even_meta = ((even_seq as u64) << 48) | ((agent_id as u64) << 32) | (expiry_sec as u64);
+        slot.meta.store(even_meta, AtomicOrdering::Release);
+        true
     }
 }
 
@@ -884,5 +1274,94 @@ mod tests {
             }
             other => panic!("Expected Flee, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_f32_waypoints_slab_and_fence_kinematics() {
+        let mut world = SimpleVoxelWorld::new();
+        for x in 0..8 {
+            for z in 0..8 {
+                world.set_solid(IVec3::new(x, 63, z), true);
+            }
+        }
+
+        // Place a bottom slab at (3, 63, 3) so walking at (3, 64, 3) stands on SLAB_BOTTOM
+        world.set_class(IVec3::new(3, 63, 3), VoxelMovementClass::SlabBottom);
+
+        let path = astar_search_f32(
+            &world,
+            FVec3::new(2.2, 64.0, 3.8),
+            FVec3::new(4.7, 64.0, 3.1),
+            5_000,
+        )
+        .expect("Must find f32 path across slab");
+
+        assert_eq!(path[0], FVec3::new(2.5, 64.0, 3.5));
+        assert_eq!(path[1], FVec3::new(3.5, 64.5, 3.5), "Slab waypoint must include +0.5m Y elevation and +0.5m X/Z centering");
+        assert_eq!(*path.last().unwrap(), FVec3::new(4.5, 64.0, 3.5));
+
+        // Fence wall (1.5m collision height) across x=5 must block jumping onto y=65
+        for z in 0..8 {
+            world.set_class(IVec3::new(5, 64, z), VoxelMovementClass::FenceWall);
+        }
+        let fence_step = astar_search_f32(
+            &world,
+            FVec3::new(4.5, 64.0, 3.5),
+            FVec3::new(5.5, 65.0, 3.5),
+            2_000,
+        );
+        assert!(fence_step.is_none(), "1.5m FenceWall must block 1.25m step-up jump");
+    }
+
+    #[test]
+    fn test_spatial_lease_table_seqlock_and_tombstone() {
+        let table = SpatialLeaseTable::new();
+        let p1 = IVec3::new(100, -58, 200);
+        let p2 = IVec3::new(100, -58, 200 + (LEASE_TABLE_SLOTS as i32)); // Collides in hash bucket
+
+        assert!(table.acquire(p1, 10, 1000, 30), "Agent 10 acquires p1");
+        assert!(!table.acquire(p1, 20, 1005, 30), "Agent 20 blocked on active p1 lease");
+        assert_eq!(table.owner_of(p1, 1010), Some(10));
+
+        // Insert colliding p2
+        assert!(table.acquire(p2, 20, 1000, 30), "Agent 20 acquires colliding p2");
+        assert_eq!(table.owner_of(p2, 1010), Some(20));
+
+        // Release p1 -> writes TOMBSTONE; p2 must remain discoverable along probe chain!
+        assert!(table.release(p1, 10), "Agent 10 releases p1 -> TOMBSTONE");
+        assert_eq!(table.owner_of(p1, 1010), None);
+        assert_eq!(
+            table.owner_of(p2, 1010),
+            Some(20),
+            "TOMBSTONE must preserve linear-probe lookup for colliding p2"
+        );
+
+        // Reclaim TOMBSTONE slot and test TTL expiry
+        assert!(table.acquire(p1, 30, 1015, 10), "Agent 30 reclaims TOMBSTONE slot");
+        assert_eq!(table.owner_of(p1, 1020), Some(30));
+        assert_eq!(table.owner_of(p1, 1026), None, "Expired lease must return None");
+        assert!(table.acquire(p1, 40, 1026, 20), "Agent 40 reclaims expired lease");
+        assert_eq!(table.owner_of(p1, 1030), Some(40));
+    }
+
+    #[test]
+    fn test_world_header_multi_version_sections() {
+        let legacy = WorldHeader {
+            min_y: 0,
+            num_sections: 16,
+            protocol_version: 498,
+            world_epoch: 1,
+        };
+        assert_eq!(legacy.max_y(), 255);
+        assert_eq!(legacy.section_index(0), Some(0));
+        assert_eq!(legacy.section_index(255), Some(15));
+        assert_eq!(legacy.section_index(-1), None);
+
+        let modern = WorldHeader::default();
+        assert_eq!(modern.min_y, -64);
+        assert_eq!(modern.max_y(), 319);
+        assert_eq!(modern.section_index(-64), Some(0));
+        assert_eq!(modern.section_index(319), Some(23));
+        assert_eq!(modern.section_index(-65), None);
     }
 }

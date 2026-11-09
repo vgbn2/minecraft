@@ -1,6 +1,7 @@
 import { Vec3 } from 'vec3'
 import { TacticalEscapeExcavator } from './tactical_escape.mjs'
-import { execFileSync } from 'child_process'
+import { execFileSync, spawn } from 'child_process'
+import net from 'net'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -41,6 +42,22 @@ export function sliceTrajectory(startPos, targetPos, maxHop = MAX_SAFE_HOP_DISTA
   if (!Number.isFinite(targetPos.x) || !Number.isFinite(targetPos.y) || !Number.isFinite(targetPos.z)) return []
 
   const safeHop = Math.min(Math.max(1, maxHop), 50)
+  const dx = targetPos.x - startPos.x
+  const dy = targetPos.y - startPos.y
+  const dz = targetPos.z - startPos.z
+  const totalDistance = Math.hypot(dx, dy, dz)
+
+  // ponytail: inline <8m short-hop fast path avoids fork/exec syscall overhead
+  if (totalDistance <= Math.min(8, safeHop)) {
+    return [{
+      x: Math.floor(targetPos.x),
+      y: Math.floor(targetPos.y),
+      z: Math.floor(targetPos.z),
+      hopIndex: 1,
+      totalHops: 1,
+      distance: totalDistance
+    }]
+  }
 
   // Fast-path: invoke native Rust kernel (mc_path_core) if compiled binary exists
   const nativeBin = getNativePathFinder()
@@ -57,11 +74,6 @@ export function sliceTrajectory(startPos, targetPos, maxHop = MAX_SAFE_HOP_DISTA
     } catch {}
   }
 
-  const dx = targetPos.x - startPos.x
-  const dy = targetPos.y - startPos.y
-  const dz = targetPos.z - startPos.z
-
-  const totalDistance = Math.hypot(dx, dy, dz)
   if (totalDistance <= safeHop) {
     return [{
       x: Math.floor(targetPos.x),
@@ -442,3 +454,132 @@ export class SafeNavigator {
 }
 
 export { SafeNavigator as SafeHopNavigator }
+
+// ponytail: persistent Unix socket client for mc-path-fast --daemon; 0 fork/exec overhead
+export class PathDaemonClient {
+  constructor(options = {}) {
+    this.socketPath = options.socketPath || process.env.MC_PATH_SOCK || `/dev/shm/mc-path-${process.getuid?.() ?? 0}.sock`
+    this.socket = null
+    this.daemonProc = null
+    this.pending = []
+    this.buffer = ''
+  }
+
+  async connect(spawnIfMissing = true) {
+    if (this.socket && !this.socket.destroyed) return true
+    const tryConnect = () => new Promise((resolve, reject) => {
+      const sock = net.createConnection(this.socketPath)
+      const onError = (err) => {
+        sock.destroy()
+        reject(err)
+      }
+      sock.once('error', onError)
+      sock.once('connect', () => {
+        sock.removeListener('error', onError)
+        this._attachSocket(sock)
+        resolve(true)
+      })
+    })
+
+    try {
+      return await tryConnect()
+    } catch (err) {
+      if (!spawnIfMissing) throw err
+      const bin = getNativePathFinder()
+      if (!bin) throw new Error('mc-path-fast binary not found')
+      await new Promise((resolve, reject) => {
+        const proc = spawn(bin, ['--daemon', this.socketPath], { stdio: ['ignore', 'pipe', 'pipe'] })
+        this.daemonProc = proc
+        proc.unref()
+        const timer = setTimeout(() => reject(new Error('mc-path-fast daemon startup timeout')), 2000)
+        proc.stdout.once('data', () => {
+          clearTimeout(timer)
+          resolve()
+        })
+        proc.once('error', (e) => {
+          clearTimeout(timer)
+          reject(e)
+        })
+      })
+      return await tryConnect()
+    }
+  }
+
+  _attachSocket(sock) {
+    this.socket = sock
+    this.buffer = ''
+    sock.setEncoding('utf8')
+    sock.on('data', (chunk) => {
+      this.buffer += chunk
+      let idx
+      while ((idx = this.buffer.indexOf('\n')) !== -1) {
+        const line = this.buffer.slice(0, idx).trim()
+        this.buffer = this.buffer.slice(idx + 1)
+        const waiter = this.pending.shift()
+        if (waiter) {
+          try {
+            waiter.resolve(JSON.parse(line))
+          } catch (e) {
+            waiter.reject(e)
+          }
+        }
+      }
+    })
+    sock.on('close', () => {
+      this.socket = null
+      while (this.pending.length > 0) {
+        this.pending.shift().reject(new Error('socket_closed'))
+      }
+    })
+  }
+
+  async sendCommand(cmdLine) {
+    await this.connect(true)
+    return new Promise((resolve, reject) => {
+      this.pending.push({ resolve, reject })
+      this.socket.write(`${cmdLine.trim()}\n`)
+    })
+  }
+
+  async initWorld({ minY = -64, numSections = 24, protocolVersion = 769, worldEpoch = 1 } = {}) {
+    return this.sendCommand(`INIT_WORLD ${minY} ${numSections} ${protocolVersion} ${worldEpoch}`)
+  }
+
+  async setClass(x, y, z, nibble) {
+    return this.sendCommand(`SET_CLASS ${Math.floor(x)} ${Math.floor(y)} ${Math.floor(z)} ${nibble & 0x0f}`)
+  }
+
+  async sliceAsync(start, target, maxHop = MAX_SAFE_HOP_DISTANCE) {
+    return this.sendCommand(
+      `SLICE ${Math.floor(start.x)} ${Math.floor(start.y)} ${Math.floor(start.z)} ${Math.floor(target.x)} ${Math.floor(target.y)} ${Math.floor(target.z)} ${maxHop}`
+    )
+  }
+
+  async findPathF32(start, goal, maxEval = 10000) {
+    return this.sendCommand(
+      `ASTAR_F32 ${Number(start.x)} ${Number(start.y)} ${Number(start.z)} ${Number(goal.x)} ${Number(goal.y)} ${Number(goal.z)} ${maxEval}`
+    )
+  }
+
+  async acquireLease(x, y, z, agentId, ttlSec = 30) {
+    return this.sendCommand(`LEASE_ACQUIRE ${Math.floor(x)} ${Math.floor(y)} ${Math.floor(z)} ${agentId} ${ttlSec}`)
+  }
+
+  async releaseLease(x, y, z, agentId) {
+    return this.sendCommand(`LEASE_RELEASE ${Math.floor(x)} ${Math.floor(y)} ${Math.floor(z)} ${agentId}`)
+  }
+
+  close() {
+    if (this.socket) {
+      try { this.socket.destroy() } catch {}
+      this.socket = null
+    }
+    if (this.daemonProc) {
+      try { this.daemonProc.kill('SIGTERM') } catch {}
+      this.daemonProc = null
+    }
+    try {
+      if (fs.existsSync(this.socketPath)) fs.unlinkSync(this.socketPath)
+    } catch {}
+  }
+}
