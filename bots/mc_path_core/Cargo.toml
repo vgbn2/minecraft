@@ -1,6 +1,6 @@
 [package]
 name = "mc_path_core"
-version = "0.1.0"
+version = "1.2.0"
 edition = "2024"
 authors = ["vgbn"]
 description = "High-performance native 3D voxel A* pathfinder and kinematics engine for Minecraft bots"

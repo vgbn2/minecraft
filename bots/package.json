@@ -1,6 +1,6 @@
 {
   "name": "mc-bot",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Low-resource AI-powered Minecraft companion agent",
   "type": "module",
   "main": "companion.mjs",

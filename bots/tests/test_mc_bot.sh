@@ -203,4 +203,11 @@ assert.strictEqual(excavator.isRecovering, false);
 console.log("Combat Evasion & Tactical Escape controllers verified.");
 ')
 
+echo "[*] 14. Testing version and release packaging..."
+ver_out="$(bash "${BOT_BIN}" version)"
+echo "${ver_out}" | grep -q "1.2.0"
+bash "${BOT_BIN}" package 1.2.0
+test -f "${BOT_DIR}/../releases/v1.2.0/mc-bot-v1.2.0.tar.gz"
+(cd "${BOT_DIR}/../releases/v1.2.0" && sha256sum -c SHA256SUMS)
+
 echo "PASS: test_mc_bot.sh completed successfully."

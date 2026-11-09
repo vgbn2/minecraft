@@ -135,6 +135,12 @@ case "${cmd}" in
     config)
         configure_bot "$@"
         ;;
+    package|release)
+        package_bot_release "$@"
+        ;;
+    version|--version|-v)
+        echo "mc-bot v1.2.0 (Stardust Crusaders Release)"
+        ;;
     help|-h|--help)
         show_help
         ;;

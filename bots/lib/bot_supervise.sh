@@ -306,3 +306,32 @@ send_bot_cmd() {
         fi
     fi
 }
+
+package_bot_release() {
+    local ver="${1:-1.2.0}"
+    local repo_root
+    repo_root="$(cd "${SOURCE_BOT_DIR}/.." && pwd)"
+    local out_dir="${repo_root}/releases/v${ver}"
+    mkdir -p "${out_dir}"
+    local archive="${out_dir}/mc-bot-v${ver}.tar.gz"
+    echo "[*] Building release bundle mc-bot-v${ver}.tar.gz..."
+    tar -czf "${archive}" \
+        --exclude='node_modules' \
+        --exclude='target' \
+        --exclude='.git' \
+        -C "${repo_root}" \
+        bots/src \
+        bots/lib \
+        bots/scripts \
+        bots/config \
+        bots/assets \
+        bots/mc-bot.sh \
+        bots/companion.mjs \
+        bots/package.json \
+        bots/package-lock.json \
+        bots/mc_path_core/Cargo.toml \
+        bots/mc_path_core/src
+    (cd "${out_dir}" && sha256sum "mc-bot-v${ver}.tar.gz" > SHA256SUMS)
+    echo "[+] Release archive created: ${archive}"
+    cat "${out_dir}/SHA256SUMS"
+}
