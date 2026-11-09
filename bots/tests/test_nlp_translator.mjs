@@ -116,4 +116,22 @@ assert.ok(resSanitized[0].rawClause.length <= 256)
 
 console.log('  [PASS] Gate 5: Spatial extraction and typo tolerance verified.')
 
+// -----------------------------------------------------------------------------
+// Gate 6: Declarative Condition-State Routing (Ambiguity: "I'm hungry" -> Kakyoin !feed)
+// -----------------------------------------------------------------------------
+console.log('  • Gate 6: Testing Condition-State Ambiguity & Specialist Routing...')
+const resHungryEN = translator.translate('vgbn', 'im hungry')
+assert.strictEqual(resHungryEN.length, 1)
+assert.strictEqual(resHungryEN[0].targetAgent, 'Kakyoin')
+assert.strictEqual(resHungryEN[0].intent, 'FEED')
+assert.strictEqual(resHungryEN[0].command, '!feed vgbn')
+
+const resHungryVN = translator.translate('vgbn', 'tôi đói bụng quá')
+assert.strictEqual(resHungryVN.length, 1)
+assert.strictEqual(resHungryVN[0].targetAgent, 'Kakyoin')
+assert.strictEqual(resHungryVN[0].intent, 'FEED')
+assert.strictEqual(resHungryVN[0].command, '!feed vgbn')
+
+console.log('  [PASS] Gate 6: Declarative condition-state routing verified.')
+
 console.log('\nPASS: test_nlp_translator.mjs completed successfully with 0 errors.')

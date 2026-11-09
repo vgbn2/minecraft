@@ -143,6 +143,11 @@ export class NlpTranslationLayer {
       if (!target) target = 'Kakyoin'
       command = '!harvest'
       tacticalBrief = renderTemplate(templates.HARVEST, { target })
+    } else if (intentRegexes.FEED && intentRegexes.FEED.test(lower)) {
+      intent = 'FEED'
+      if (!target) target = 'Kakyoin'
+      command = `!feed ${speaker}`
+      tacticalBrief = renderTemplate(templates.FEED, { target, speaker })
     } else if (intentRegexes.SCOUT && intentRegexes.SCOUT.test(lower)) {
       intent = 'SCOUT'
       if (!target) target = 'Iggy'
