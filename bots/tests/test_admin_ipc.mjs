@@ -134,6 +134,12 @@ console.log('  [PASS] Gate 2: Targeted IPC dispatch & ingestion verified.')
 // -----------------------------------------------------------------------------
 console.log('  • Gate 3: Testing broadcast dispatch across all squad agents...')
 
+// Clean any existing squad cmd files before test
+for (const botName of SQUAD_ROSTER) {
+  try { fs.unlinkSync(`/dev/shm/mc-bot/${botName}.cmd`) } catch {}
+  try { fs.unlinkSync(`/dev/shm/mc-bot-${botName}.cmd`) } catch {}
+}
+
 IpcManager.dispatchCommand('all', '!stop')
 for (const botName of SQUAD_ROSTER) {
   const p1 = `/dev/shm/mc-bot/${botName}.cmd`

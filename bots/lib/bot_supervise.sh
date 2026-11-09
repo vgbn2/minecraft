@@ -276,7 +276,14 @@ send_bot_cmd() {
         return 1
     fi
     if [[ "${is_remote}" -eq 1 ]]; then
-        remote_ssh "${REMOTE_DIR}/mc-bot.sh cmd ${target_bot:-all} '${command_string}'"
+        local safe_bot="${target_bot:-all}"
+        if [[ ! "${safe_bot}" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "Error: Invalid target bot '${safe_bot}'" >&2
+            return 1
+        fi
+        local escaped_cmd
+        printf -v escaped_cmd '%q' "${command_string}"
+        remote_ssh "${REMOTE_DIR}/mc-bot.sh cmd ${safe_bot} ${escaped_cmd}"
         echo "[+] Dispatched command to remote bot on CT 116: ${command_string}"
     else
         if [[ -z "${target_bot}" || "${target_bot}" == "all" ]]; then

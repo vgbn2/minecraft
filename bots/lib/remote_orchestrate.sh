@@ -220,7 +220,9 @@ remote_start_squad() {
     fi
     remote_sync_bot
     echo "[*] Launching JoJo Stand Squad remotely on CT 116 (${REMOTE_HOST})..."
-    remote_ssh "${REMOTE_DIR}/mc-bot.sh squad start ${target_endpoint}"
+    local escaped_ep
+    printf -v escaped_ep '%q' "${target_endpoint}"
+    remote_ssh "${REMOTE_DIR}/mc-bot.sh squad start ${escaped_ep}"
 }
 
 remote_stop_squad() {
@@ -233,7 +235,9 @@ remote_status_squad() {
 }
 
 remote_cmd_squad() {
-    remote_ssh "${REMOTE_DIR}/mc-bot.sh squad cmd \"$*\""
+    local escaped_cmd
+    printf -v escaped_cmd '%q' "$*"
+    remote_ssh "${REMOTE_DIR}/mc-bot.sh squad cmd ${escaped_cmd}"
 }
 
 remote_watchdog_squad() {
@@ -251,7 +255,13 @@ remote_squad_repl() {
 
 remote_log_squad() {
     local bname="${1:-Jotaro}"
-    remote_ssh "${REMOTE_DIR}/mc-bot.sh log ${bname}"
+    if [[ ! "${bname}" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo "Error: Invalid squad member name '${bname}'" >&2
+        return 1
+    fi
+    local escaped_bname
+    printf -v escaped_bname '%q' "${bname}"
+    remote_ssh "${REMOTE_DIR}/mc-bot.sh log ${escaped_bname}"
 }
 
 remote_monitor() {

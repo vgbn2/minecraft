@@ -70,4 +70,5 @@ worlds/
 # Ephemeral workspace notes and agent session state
 workspace/
 workspace
+tests/repro/
 
