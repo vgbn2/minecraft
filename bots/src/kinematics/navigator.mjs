@@ -1,8 +1,29 @@
 import { Vec3 } from 'vec3'
 import { TacticalEscapeExcavator } from './tactical_escape.mjs'
+import { execFileSync } from 'child_process'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 // ponytail: linear Euclidean hop slicing capped at 16m to stay strictly within loaded chunks; upgrade to navmesh if obstacles exceed 16m
 export const MAX_SAFE_HOP_DISTANCE = 16
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const CANDIDATE_BINS = [
+  process.env.MC_PATH_BIN,
+  path.join(__dirname, '../../mc_path_core/target/release/mc-path-fast'),
+  '/opt/mc-bot/bin/mc-path-fast',
+  '/tmp/mc-path-fast'
+].filter(Boolean)
+
+export function getNativePathFinder() {
+  for (const p of CANDIDATE_BINS) {
+    try {
+      if (fs.existsSync(p)) return p
+    } catch {}
+  }
+  return null
+}
 
 /**
  * Calculates a sequence of safe waypoints from startPos to targetPos.
@@ -19,11 +40,27 @@ export function sliceTrajectory(startPos, targetPos, maxHop = MAX_SAFE_HOP_DISTA
   if (!Number.isFinite(startPos.x) || !Number.isFinite(startPos.y) || !Number.isFinite(startPos.z)) return []
   if (!Number.isFinite(targetPos.x) || !Number.isFinite(targetPos.y) || !Number.isFinite(targetPos.z)) return []
 
+  const safeHop = Math.min(Math.max(1, maxHop), 50)
+
+  // Fast-path: invoke native Rust kernel (mc_path_core) if compiled binary exists
+  const nativeBin = getNativePathFinder()
+  if (nativeBin) {
+    try {
+      const stdout = execFileSync(nativeBin, [
+        'slice-json',
+        Math.floor(startPos.x), Math.floor(startPos.y), Math.floor(startPos.z),
+        Math.floor(targetPos.x), Math.floor(targetPos.y), Math.floor(targetPos.z),
+        safeHop
+      ], { timeout: 100, encoding: 'utf8' })
+      const parsed = JSON.parse(stdout.trim())
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    } catch {}
+  }
+
   const dx = targetPos.x - startPos.x
   const dy = targetPos.y - startPos.y
   const dz = targetPos.z - startPos.z
 
-  const safeHop = Math.min(Math.max(1, maxHop), 50)
   const totalDistance = Math.hypot(dx, dy, dz)
   if (totalDistance <= safeHop) {
     return [{

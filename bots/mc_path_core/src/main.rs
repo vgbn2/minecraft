@@ -7,6 +7,7 @@ fn print_usage() {
     eprintln!();
     eprintln!("Usage:");
     eprintln!("  mc-path-fast slice <x1> <y1> <z1> <x2> <y2> <z2> [max_hop]");
+    eprintln!("  mc-path-fast slice-json <x1> <y1> <z1> <x2> <y2> <z2> [max_hop]");
     eprintln!("  mc-path-fast bench [iterations]");
     eprintln!("  mc-path-fast --version");
 }
@@ -43,6 +44,28 @@ fn main() {
             for (idx, hop) in hops.iter().enumerate() {
                 println!("  Hop {}/{}: ({}, {}, {})", idx + 1, hops.len(), hop.x, hop.y, hop.z);
             }
+        }
+        "slice-json" => {
+            if args.len() < 8 {
+                println!("[]");
+                std::process::exit(1);
+            }
+            let x1: i32 = args[2].parse().unwrap_or(0);
+            let y1: i32 = args[3].parse().unwrap_or(64);
+            let z1: i32 = args[4].parse().unwrap_or(0);
+            let x2: i32 = args[5].parse().unwrap_or(0);
+            let y2: i32 = args[6].parse().unwrap_or(64);
+            let z2: i32 = args[7].parse().unwrap_or(0);
+            let max_hop: f64 = args.get(8).and_then(|s| s.parse().ok()).unwrap_or(16.0);
+
+            let start = IVec3::new(x1, y1, z1);
+            let target = IVec3::new(x2, y2, z2);
+            let hops = slice_trajectory(start, target, max_hop);
+
+            let json_elements: Vec<String> = hops.iter().enumerate().map(|(i, h)| {
+                format!("{{\"x\":{},\"y\":{},\"z\":{},\"hopIndex\":{},\"totalHops\":{}}}", h.x, h.y, h.z, i + 1, hops.len())
+            }).collect();
+            println!("[{}]", json_elements.join(","));
         }
         "bench" => {
             let iters: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(100);
