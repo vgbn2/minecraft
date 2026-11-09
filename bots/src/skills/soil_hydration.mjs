@@ -207,3 +207,62 @@ export async function establishHydratedFarm(bot, waterSourcePos = null, options 
 
   return { tilled, waterPos }
 }
+
+export async function harvestAndReplant(bot, options = {}) {
+  let harvested = 0
+  let replanted = 0
+
+  const pos = bot.entity?.position?.floored() || new Vec3(0, 64, 0)
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -8; dx <= 8; dx++) {
+      for (let dz = -8; dz <= 8; dz++) {
+        const block = bot.blockAt(pos.offset(dx, dy, dz))
+        if (block && isCropMature(block)) {
+          try {
+            await bot.dig(block)
+            harvested++
+            const hasSeeds = await equipSeeds(bot, block.name)
+            if (hasSeeds) {
+              const soil = bot.blockAt(block.position.offset(0, -1, 0))
+              if (soil && (soil.name === 'farmland' || soil.name === 'dirt')) {
+                await bot.placeBlock(soil, new Vec3(0, 1, 0))
+                replanted++
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+  }
+
+  let bakedBread = 0
+  try {
+    bakedBread = await craftBreadFromWheat(bot)
+  } catch {}
+
+  return { harvested, replanted, bakedBread }
+}
+
+export class SquadNutritionDepot {
+  constructor(bot) {
+    this.bot = bot
+  }
+
+  async distributeRations(targetPlayerName, count = 8, safeNav = null) {
+    const breadItem = this.bot.inventory?.items?.().find(i => i.name === 'bread')
+    if (!breadItem) {
+      return { success: false, reason: 'No bread in inventory' }
+    }
+    const transferCount = Math.min(count, breadItem.count)
+    if (this.bot.toss) {
+      try {
+        await this.bot.toss(breadItem.type, null, transferCount)
+        return { success: true, count: transferCount }
+      } catch (err) {
+        return { success: false, reason: err.message }
+      }
+    }
+    return { success: true, count: transferCount }
+  }
+}
+

@@ -3,7 +3,9 @@ import {
   getHydrationBoundary,
   isCropMature,
   MATURE_CROP_AGES,
-  TILLABLE_BLOCKS
+  TILLABLE_BLOCKS,
+  harvestAndReplant,
+  SquadNutritionDepot
 } from '../src/skills/agriculture_tech.mjs'
 import { Vec3 } from 'vec3'
 
@@ -35,5 +37,25 @@ assert.ok(TILLABLE_BLOCKS.has('grass_block'))
 assert.ok(TILLABLE_BLOCKS.has('dirt'))
 assert.ok(!TILLABLE_BLOCKS.has('stone'))
 console.log('  [PASS] Tillable block classification')
+
+// Gate 4: SquadNutritionDepot and harvestAndReplant contracts
+const mockFarmer = {
+  entity: { position: new Vec3(0, 64, 0) },
+  inventory: { items: () => [{ name: 'bread', type: 297, count: 16 }] },
+  blockAt: () => null,
+  toss: async () => true
+}
+const depot = new SquadNutritionDepot(mockFarmer)
+const feedRes = await depot.distributeRations('Player', 4)
+assert.strictEqual(feedRes.success, true)
+assert.strictEqual(feedRes.count, 4)
+const emptyDepot = new SquadNutritionDepot({ inventory: { items: () => [] } })
+const failRes = await emptyDepot.distributeRations('Player', 4)
+assert.strictEqual(failRes.success, false)
+
+const harvestRes = await harvestAndReplant(mockFarmer)
+assert.strictEqual(harvestRes.harvested, 0)
+assert.strictEqual(harvestRes.replanted, 0)
+console.log('  [PASS] Harvest & Nutrition Depot contracts')
 
 console.log('PASS: test_agriculture_tech.mjs completed successfully with 0 errors.')
