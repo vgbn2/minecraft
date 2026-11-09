@@ -11,9 +11,14 @@ import { SafeHopNavigator } from './kinematics/navigator.mjs'
 import { CombatEvasionController } from './kinematics/combat_evasion.mjs'
 import { TacticalEscapeExcavator } from './kinematics/tactical_escape.mjs'
 import { formatJojoCard, formatJojoChatLine, formatSquadMatrix } from './squad/jojo_stands.mjs'
+import { MotionWatchdog } from './intelligence/motion_watchdog.mjs'
+import { isSquadBot, isHumanPlayer, getNearestHuman, formatEntitySurvey } from './core/player_registry.mjs'
 import { breakBlockAt, inspectTargetBlock, activateNearestBlock, giveItemsToPlayer } from './skills/interaction.mjs'
 import { executeDeconstruction } from './skills/deconstruction.mjs'
+import { generateHouse20x20Plan, generateHouseClearancePlan, AutonomousArchitectureRunner } from './skills/voxel_schematic.mjs'
+import { executeStructureBuild } from './skills/voxel_placement.mjs'
 import { bootstrapTools, establishHydratedFarm, harvestAndReplant, craftBreadFromWheat, SquadNutritionDepot } from './skills/agriculture_tech.mjs'
+import { AutonomousIncentiveEngine } from './intelligence/autonomous_routine.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -98,10 +103,18 @@ export const bot = createBotInstance({
 })
 
 // 3. Initialize Kinematics & Spatial Systems
-export const safeNav = new SafeHopNavigator(bot, { maxHopDistance: 24 })
-export const combatEvasion = new CombatEvasionController(bot)
 export const escapeExcavator = new TacticalEscapeExcavator(bot)
+export const safeNav = new SafeHopNavigator(bot, { maxHopDistance: 24, excavator: escapeExcavator })
+export const combatEvasion = new CombatEvasionController(bot)
 export const supervisor = new PrompterSupervisor(bot)
+export const watchdog = new MotionWatchdog(bot, {
+  idleThresholdSec: 12,
+  onAlert: (msg, status) => {
+    try {
+      fs.writeFileSync(`/dev/shm/mc-bot/${bot.username || 'bot'}.alert`, JSON.stringify(status, null, 2))
+    } catch {}
+  }
+})
 
 // 4. Chat Response Helper
 export function sendResponse(target, message, isWhisper = false) {
@@ -124,13 +137,25 @@ export function sendResponse(target, message, isWhisper = false) {
 export const aiAgent = new AIAgent(bot, config, personality, {
   safeNav,
   supervisor,
-  sendResponse
+  sendResponse,
+  watchdog
 })
+
+export const incentiveEngine = new AutonomousIncentiveEngine(bot, safeNav, watchdog, personality.role)
+let activePatrolInterval = null
+
+export function startPatrolLoop(radius = 12, customCenter = null) {
+  if (activePatrolInterval) {
+    clearInterval(activePatrolInterval)
+    activePatrolInterval = null
+  }
+  incentiveEngine.start(5000)
+}
 
 // 6. Fast-path command dispatcher
 export async function handleFastCommand(sender, command, args, isWhisper) {
-  const player = bot.players[sender]?.entity ||
-                 bot.nearestEntity(e => (e.type === 'player' || e.name === 'player') && e !== bot.entity)
+  const player = (sender && !isSquadBot(sender) && bot.players[sender]?.entity) ||
+                 getNearestHuman(bot)
   const context = {
     playerPos: player?.position?.floored(),
     botPos: bot.entity?.position?.floored()
@@ -140,6 +165,7 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
   if (intent) {
     switch (intent.type) {
       case 'NAVIGATE': {
+        watchdog.setMode('TASK_ACTIVE', intent.description || 'navigating')
         aiAgent.executeToolCall({ function: { name: 'stop', arguments: '{}' } }, sender, isWhisper)
         sendResponse(sender, `${intent.description}...`, isWhisper)
         if (intent.route && intent.route.length > 0) {
@@ -155,15 +181,31 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
         return true
       }
       case 'DECONSTRUCT': {
-        executeDeconstruction(bot, intent.plan, sender, isWhisper, sendResponse, supervisor)
+        if (activePatrolInterval) {
+          clearInterval(activePatrolInterval)
+          activePatrolInterval = null
+        }
+        watchdog.setMode('TASK_ACTIVE', 'deconstruct')
+        executeDeconstruction(bot, intent.plan, sender, isWhisper, sendResponse, supervisor, safeNav)
+          .then(() => watchdog.setMode('IDLE'))
+          .catch(err => {
+            console.error('[!] Deconstruction error:', err)
+            watchdog.setMode('IDLE')
+          })
         return true
       }
       case 'WAYPOINT_SET':
       case 'WAYPOINT_CONNECT':
       case 'INFO':
       case 'ERROR':
-      case 'USAGE':
+      case 'USAGE': {
+        sendResponse(sender, intent.message, isWhisper)
+        return true
+      }
       case 'ABORT': {
+        watchdog.setMode('STANDBY', 'Commanded standby')
+        safeNav.stop()
+        if (bot.pathfinder) bot.pathfinder.setGoal(null)
         sendResponse(sender, intent.message, isWhisper)
         return true
       }
@@ -173,39 +215,256 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
   switch (command) {
     case 'come':
     case 'follow': {
-      if (!player) {
-        sendResponse(sender, "I can't see you right now!", isWhisper)
+      if (activePatrolInterval) {
+        clearInterval(activePatrolInterval)
+        activePatrolInterval = null
+      }
+      const targetEntity = (args[0] && bot.players[args[0]]?.entity) || player
+      if (!targetEntity) {
+        sendResponse(sender, "I can't see you or any human player right now!", isWhisper)
         return true
       }
-      sendResponse(sender, `Coming to you, ${sender}!`, isWhisper)
-      safeNav.navigateTo(player.position.floored())
+      const targetName = targetEntity.username || sender
+      watchdog.setMode('TASK_ACTIVE', `follow ${targetName}`)
+      sendResponse(sender, `Following ${targetName}!`, isWhisper)
+      if (bot.pathfinder && pathfinderPkg?.goals?.GoalFollow) {
+        safeNav.stop()
+        bot.pathfinder.setGoal(new pathfinderPkg.goals.GoalFollow(targetEntity, 2), true)
+      } else {
+        safeNav.navigateTo(targetEntity.position.floored()).then(() => watchdog.setMode('IDLE'))
+      }
       return true
     }
     case 'goto': {
+      if (activePatrolInterval) {
+        clearInterval(activePatrolInterval)
+        activePatrolInterval = null
+      }
       if (args.length < 3) {
         sendResponse(sender, 'Usage: !goto <x> <y> <z>', isWhisper)
         return true
       }
       const targetPos = { x: parseFloat(args[0]), y: parseFloat(args[1]), z: parseFloat(args[2]) }
+      watchdog.setMode('TASK_ACTIVE', `goto ${targetPos.x} ${targetPos.y} ${targetPos.z}`)
       sendResponse(sender, `Navigating to (${targetPos.x}, ${targetPos.y}, ${targetPos.z})...`, isWhisper)
-      safeNav.navigateTo(targetPos)
+      safeNav.navigateTo(targetPos).then((res) => {
+        if (res?.success) {
+          sendResponse(sender, `Arrived at (${targetPos.x}, ${targetPos.y}, ${targetPos.z})!`, isWhisper)
+        }
+        watchdog.setMode('IDLE')
+      }).catch(() => watchdog.setMode('IDLE'))
       return true
     }
+    case 'patrol':
+    case 'wander':
+    case 'roam': {
+      const radius = Math.min(Math.max(parseFloat(args[0]) || 12, 4), 30)
+      startPatrolLoop(radius)
+      const center = bot.entity ? bot.entity.position.floored() : { x: 0, y: 64, z: 0 }
+      sendResponse(sender, `Patrolling perimeter (radius: ${radius}m around ${center.x}, ${center.y}, ${center.z})...`, isWhisper)
+      return true
+    }
+    case 'mine':
+    case 'quarry': {
+      const rawName = (args[0] || 'stone').toLowerCase().replace(/^(minecraft:)/, '')
+      const targetCount = Math.min(Math.max(parseInt(args[1], 10) || 1, 1), 10)
+      const blockType = bot.registry?.blocksByName?.[rawName]
+      if (!blockType) {
+        sendResponse(sender, `Unknown block type: ${rawName}`, isWhisper)
+        return true
+      }
+      const searchDist = 16
+      const targets = bot.findBlocks({
+        matching: blockType.id,
+        maxDistance: searchDist,
+        count: targetCount
+      })
+      if (!targets || targets.length === 0) {
+        sendResponse(sender, `No ${rawName} found within ${searchDist}m.`, isWhisper)
+        return true
+      }
+      watchdog.setMode('TASK_ACTIVE', `mine ${rawName} x${targets.length}`)
+      sendResponse(sender, `Found ${targets.length} ${rawName}(s). Mining...`, isWhisper)
+      ;(async () => {
+        try {
+          const blocks = targets.map(p => bot.blockAt(p)).filter(Boolean)
+          await bot.collectBlock.collect(blocks)
+          sendResponse(sender, `Finished mining ${rawName}!`, isWhisper)
+        } catch (err) {
+          sendResponse(sender, `Mining failed: ${err.message}`, isWhisper)
+        } finally {
+          watchdog.setMode('IDLE')
+        }
+      })()
+      return true
+    }
+    case 'clear':
+    case 'excavate': {
+      if (activePatrolInterval) {
+        clearInterval(activePatrolInterval)
+        activePatrolInterval = null
+      }
+      const target = (args[0] || '').toLowerCase()
+      if (target === 'house') {
+        const origin = new Vec3(-240, 65, 100)
+        const sector = args[1] || bot.username || 'all'
+        const plan = generateHouseClearancePlan(origin, { bot, sector, height: 4, includeFloor: true })
+        watchdog.setMode('TASK_ACTIVE', `house clear ${sector}`)
+        sendResponse(sender, `Excavating 20x20 house footprint [sector: ${sector}] (${plan.length} blocks to clear)...`, isWhisper)
+        executeDeconstruction(bot, plan, sender, isWhisper, sendResponse, supervisor, safeNav)
+          .then(() => watchdog.setMode('IDLE'))
+          .catch(() => watchdog.setMode('IDLE'))
+        return true
+      }
+      const r = Math.min(Math.max(parseInt(args[0], 10) || 3, 1), 10)
+      const h = Math.min(Math.max(parseInt(args[1], 10) || 3, 1), 5)
+      const curPos = bot.entity?.position?.floored() || new Vec3(-240, 65, 100)
+      const plan = []
+      for (let dy = h; dy >= -1; dy--) {
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dz = -r; dz <= r; dz++) {
+            const p = curPos.offset(dx, dy, dz)
+            const blk = bot.blockAt(p)
+            if (blk && blk.name !== 'air' && blk.name !== 'cave_air' && blk.name !== 'water' && blk.name !== 'lava') {
+              plan.push(p)
+            }
+          }
+        }
+      }
+      watchdog.setMode('TASK_ACTIVE', `clear r=${r}`)
+      sendResponse(sender, `Clearing radius ${r} (${plan.length} solid blocks)...`, isWhisper)
+      executeDeconstruction(bot, plan, sender, isWhisper, sendResponse, supervisor, safeNav)
+        .then(() => watchdog.setMode('IDLE'))
+        .catch(() => watchdog.setMode('IDLE'))
+      return true
+    }
+    case 'house': {
+      if (activePatrolInterval) {
+        clearInterval(activePatrolInterval)
+        activePatrolInterval = null
+      }
+      const sub = (args[0] || 'status').toLowerCase()
+      const origin = new Vec3(-240, 65, 100)
+      if (sub === 'clear' || sub === 'excavate') {
+        const sector = args[1] || bot.username || 'all'
+        const plan = generateHouseClearancePlan(origin, { bot, sector, height: 4, includeFloor: true })
+        watchdog.setMode('TASK_ACTIVE', `house clear ${sector}`)
+        sendResponse(sender, `Excavating 20x20 house footprint [sector: ${sector}] at (${origin.x}, ${origin.y}, ${origin.z}) [${plan.length} blocks]...`, isWhisper)
+        executeDeconstruction(bot, plan, sender, isWhisper, sendResponse, supervisor, safeNav)
+          .then((cleared) => {
+            sendResponse(sender, `Cleared ${cleared} blocks! Resuming house perimeter patrol.`, isWhisper)
+            startPatrolLoop(12, origin)
+          })
+          .catch(() => startPatrolLoop(12, origin))
+        return true
+      } else if (sub === 'build') {
+        const fullPlan = generateHouse20x20Plan(origin)
+        const foundationPlan = fullPlan.filter(v => v.layer <= 1)
+        watchdog.setMode('TASK_ACTIVE', 'house build')
+        sendResponse(sender, `Constructing 20x20 house at (${origin.x}, ${origin.y}, ${origin.z}) (${foundationPlan.length} foundation blocks)...`, isWhisper)
+        const runner = new AutonomousArchitectureRunner(bot, { safeNav })
+        let lastReport = 0
+        runner.executePlan(foundationPlan, {
+          onProgress: p => {
+            if (p.placed > lastReport && p.placed % 10 === 0) {
+              lastReport = p.placed
+              sendResponse(sender, `House build progress: ${p.placed}/${foundationPlan.length} blocks`, isWhisper)
+            }
+          }
+        }).then(res => {
+          sendResponse(sender, `House build: Placed ${res.placed} blocks. Resuming perimeter patrol.`, isWhisper)
+          startPatrolLoop(12, origin)
+        }).catch(err => {
+          sendResponse(sender, `House build error: ${err.message}`, isWhisper)
+          startPatrolLoop(12, origin)
+        })
+        return true
+      } else if (sub === 'plan') {
+        const fullPlan = generateHouse20x20Plan(origin)
+        sendResponse(sender, `20x20 Survival House Plan: Origin (${origin.x}, ${origin.y}, ${origin.z}), 22x22 footprint, 11 height, ${fullPlan.length} total voxels (400 foundation).`, isWhisper)
+        return true
+      } else {
+        const pending = generateHouseClearancePlan(origin, { bot, height: 4, includeFloor: true })
+        sendResponse(sender, `House site at (${origin.x}, ${origin.y}, ${origin.z}): ${pending.length} blocks remaining to clear before foundation. Use '!house clear' or '!house build'.`, isWhisper)
+        return true
+      }
+    }
+    case 'build': {
+      if (activePatrolInterval) {
+        clearInterval(activePatrolInterval)
+        activePatrolInterval = null
+      }
+      const type = (args[0] || 'wall').toLowerCase()
+      if (type === 'house') {
+        const origin = new Vec3(-240, 65, 100)
+        const fullPlan = generateHouse20x20Plan(origin)
+        const foundationPlan = fullPlan.filter(v => v.layer <= 1)
+        watchdog.setMode('TASK_ACTIVE', 'build house')
+        sendResponse(sender, `Building 20x20 house at (${origin.x}, ${origin.y}, ${origin.z}) (${foundationPlan.length} blocks)...`, isWhisper)
+        const runner = new AutonomousArchitectureRunner(bot, { safeNav })
+        runner.executePlan(foundationPlan).then(res => {
+          sendResponse(sender, `Built ${res.placed} blocks of house.`, isWhisper)
+          watchdog.setMode('IDLE')
+        }).catch(err => {
+          sendResponse(sender, `Build error: ${err.message}`, isWhisper)
+          watchdog.setMode('IDLE')
+        })
+        return true
+      }
+      const mat = (args[1] || 'dirt').toLowerCase()
+      const size = parseInt(args[2], 10) || 3
+      watchdog.setMode('TASK_ACTIVE', `build ${type} ${mat}`)
+      sendResponse(sender, `Building ${type} of ${mat} (size: ${size})...`, isWhisper)
+      executeStructureBuild(bot, type, mat, size, sender, isWhisper, sendResponse)
+        .then(() => watchdog.setMode('IDLE'))
+        .catch(() => watchdog.setMode('IDLE'))
+      return true
+    }
+    case 'standby':
     case 'stay':
     case 'stop': {
+      if (activePatrolInterval) {
+        clearInterval(activePatrolInterval)
+        activePatrolInterval = null
+      }
+      incentiveEngine.stop()
       safeNav.stop()
       supervisor.abort()
       if (bot.pathfinder) bot.pathfinder.setGoal(null)
+      watchdog.setMode('STANDBY', 'Commanded standby')
       sendResponse(sender, 'Standing by.', isWhisper)
       return true
     }
+    case 'afk': {
+      const target = args[0] || 'farm'
+      incentiveEngine.stop()
+      safeNav.stop()
+      supervisor.abort()
+      if (bot.pathfinder) bot.pathfinder.setGoal(null)
+      watchdog.setMode('AFK_FARM', `AFK at ${target}`)
+      sendResponse(sender, `AFK mode active (${target}). Standing still intentionally.`, isWhisper)
+      return true
+    }
+    case 'watchdog':
+    case 'alert':
+    case 'alerts':
+    case 'idle': {
+      const st = watchdog.queryStatus()
+      try {
+        fs.writeFileSync(`/dev/shm/mc-bot/${bot.username || 'bot'}.alert`, JSON.stringify(st, null, 2))
+      } catch {}
+      const tag = st.isAlerting ? '⚠️ [ALERTING]' : '✓ [OK]'
+      const exemptTag = st.isExempt ? ` (EXEMPT: ${st.mode})` : ''
+      sendResponse(sender, `${tag} Mode: ${st.mode}${exemptTag} | Still: ${st.stationaryDurationSec}s | Task: ${st.activeTask || 'none'}`, isWhisper)
+      return true
+    }
     case 'status': {
-      const health = Math.round(bot.health || 20)
-      const food = Math.round(bot.food || 20)
+      const health = Math.round(bot.health !== undefined ? bot.health : incentiveEngine.simulatedHealth)
+      const food = Math.round(bot.food !== undefined ? bot.food : incentiveEngine.simulatedFood)
       const pos = bot.entity ? bot.entity.position.floored() : 'unknown'
       const invList = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(', ') || 'empty'
       const chunkCount = bot.world?.getColumns ? bot.world.getColumns().length : 0
-      sendResponse(sender, `Health: ${health}/20 | Food: ${food}/20 | Pos: ${pos} | Inv: [${invList}] | Chunks: ${chunkCount} | AI: ${aiAgent.tokenTotals.total}t (${aiAgent.tokenTotals.calls}c)`, isWhisper)
+      sendResponse(sender, `Health: ${health}/20 | Food: ${food}/20 | Pos: ${pos} | Credits: ${incentiveEngine.laborCredits} | Slack: ${Math.round(incentiveEngine.slackingSeconds)}s | Inv: [${invList}] | Chunks: ${chunkCount} | AI: ${aiAgent.tokenTotals.total}t (${aiAgent.tokenTotals.calls}c)`, isWhisper)
       return true
     }
     case 'jojo':
@@ -245,12 +504,11 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
       if (!bot.entity) return true
       const bPos = bot.entity.position.floored()
       const standingOn = bot.blockAt(bPos.offset(0, -1, 0))?.name || 'air'
-      const nearby = Object.values(bot.entities)
-        .filter(e => e !== bot.entity && e.position && e.position.distanceTo(bot.entity.position) < 24)
-        .map(e => `${e.name || e.type}(${Math.round(e.position.distanceTo(bot.entity.position))}m)`)
-        .slice(0, 4)
-        .join(', ') || 'none'
-      sendResponse(sender, `At (${bPos.x}, ${bPos.y}, ${bPos.z}) on ${standingOn}. Nearby: ${nearby}`, isWhisper)
+      const survey = formatEntitySurvey(bot, 24)
+      const humansStr = survey.humans.length ? `Humans: [${survey.humans.join(', ')}]` : 'Humans: none'
+      const squadStr = survey.squad.length ? `Squad: [${survey.squad.join(', ')}]` : 'Squad: none'
+      const mobsStr = survey.mobs.length ? `Mobs: [${survey.mobs.slice(0, 4).join(', ')}]` : 'Mobs: none'
+      sendResponse(sender, `At (${bPos.x}, ${bPos.y}, ${bPos.z}) [${standingOn}]. ${humansStr} | ${squadStr} | ${mobsStr}`, isWhisper)
       return true
     }
     case 'break':
@@ -300,6 +558,7 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
       return true
     }
     case 'bootstrap': {
+      watchdog.setMode('TASK_ACTIVE', 'bootstrap')
       sendResponse(sender, 'Starting tool tech tree progression...', isWhisper)
       bootstrapTools(bot, { log: m => console.log(m) })
         .then(res => sendResponse(sender, res.message || 'Tools bootstrapped!', isWhisper))
@@ -307,6 +566,7 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
       return true
     }
     case 'farm': {
+      watchdog.setMode('TASK_ACTIVE', 'farm')
       sendResponse(sender, 'Tilling and planting 9x9 hydrated farm...', isWhisper)
       establishHydratedFarm(bot, null, { log: m => console.log(m) })
         .then(res => sendResponse(sender, `Farm established! Tilled: ${res.tilled}, Planted: ${res.planted}`, isWhisper))
@@ -314,6 +574,7 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
       return true
     }
     case 'harvest': {
+      watchdog.setMode('TASK_ACTIVE', 'harvest')
       sendResponse(sender, 'Harvesting and replanting mature crops...', isWhisper)
       harvestAndReplant(bot, { log: m => console.log(m) })
         .then(res => sendResponse(sender, `Harvest complete! Reaped: ${res.harvested}, Replanted: ${res.replanted}, Bread: ${res.bakedBread}`, isWhisper))
@@ -321,6 +582,7 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
       return true
     }
     case 'feed': {
+      watchdog.setMode('TASK_ACTIVE', `feed ${args[0] || sender}`)
       const target = args[0] || sender
       const depot = new SquadNutritionDepot(bot)
       depot.distributeRations(target, 8, safeNav)
@@ -329,7 +591,7 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
       return true
     }
     case 'help': {
-      sendResponse(sender, `Fast cmds: !jojo, !squad, !come, !goto <x y z>, !survey, !swing, !break, !inspect, !interact <type>, !give <item>, !clear <r>, !setmark <n>, !gotomark <n>, !marks, !mine, !build, !bootstrap, !farm, !harvest, !feed, !stop.`, isWhisper)
+      sendResponse(sender, `Fast cmds: !jojo, !squad, !come, !goto <x y z>, !survey, !swing, !break, !inspect, !interact <type>, !give <item>, !clear <r>, !setmark <n>, !gotomark <n>, !marks, !mine, !build, !bootstrap, !farm, !harvest, !feed, !afk <target>, !watchdog, !stop.`, isWhisper)
       return true
     }
   }
@@ -340,6 +602,8 @@ export async function handleFastCommand(sender, command, args, isWhisper) {
 export function handleMessage(sender, rawMessage, isWhisper, isIpc = false) {
   const botName = username || bot.username || 'Companion'
   if (sender === botName || !bot.entity) return
+  // Prevent echo loops: squad bots ignore each other's public chat unless via whisper or IPC
+  if (!isWhisper && !isIpc && isSquadBot(sender, botName)) return
   if (!bot.isAlive || (bot.health !== undefined && bot.health <= 0)) {
     sendResponse(sender, "I'm currently respawning, please wait a moment!", isWhisper)
     return
@@ -400,6 +664,24 @@ bot.once('spawn', () => {
       }
     }
   } catch {}
+
+  // Auto-engage autonomous incentive engine on spawn if idle
+  setTimeout(() => {
+    if (watchdog.mode === 'IDLE') {
+      incentiveEngine.start(5000)
+    }
+  }, 3000)
+})
+
+bot.on('death', () => {
+  incentiveEngine.stop()
+  console.log(`[!] Bot '${username}' died in world. Incentive engine halted pending respawn.`)
+})
+
+bot.on('respawn', () => {
+  setTimeout(() => {
+    incentiveEngine.start(5000)
+  }, 3000)
 })
 
 // 9. Start IPC Manager

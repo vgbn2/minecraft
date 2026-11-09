@@ -62,6 +62,7 @@ releases/
 bots/node_modules
 bots/node_modules/
 bots/mc_path_core/target/
+bots/bin/
 target/
 worlds/
 .claude/

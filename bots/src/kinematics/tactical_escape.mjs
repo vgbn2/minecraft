@@ -14,6 +14,13 @@ export class TacticalEscapeExcavator {
     if (!this.bot?.on) return
     this.bot.on('physicsTick', () => {
       if (this.isRecovering || !this.bot.entity) return
+
+      // Active digging or block collection is intentionally stationary
+      if (this.bot.targetDigBlock || (this.bot.collectBlock && !this.bot.collectBlock.targets?.empty)) {
+        this.stationaryTicks = 0
+        return
+      }
+
       const curPos = this.bot.entity.position
       if (!this.lastPosition) {
         this.lastPosition = curPos.clone()
@@ -34,15 +41,17 @@ export class TacticalEscapeExcavator {
 
       this.lastPosition = curPos.clone()
 
-      if (this.stationaryTicks >= 20) {
+      // ponytail: 80 ticks (4s) threshold prevents premature cancellation during path planning or block targeting
+      if (this.stationaryTicks >= 80) {
         this.stationaryTicks = 0
-        this.executeEscape('kinematic_stall_20t')
+        this.executeEscape('kinematic_stall_80t')
       }
     })
   }
 
   async executeEscape(reason = 'manual') {
     if (this.isRecovering || !this.bot.entity) return false
+    if (this.bot.targetDigBlock || (this.bot.collectBlock && !this.bot.collectBlock.targets?.empty)) return false
     this.isRecovering = true
     console.log(`[!] TacticalEscape: Entrapment detected (reason: ${reason}). Initiating clearance...`)
 

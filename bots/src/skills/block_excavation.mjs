@@ -26,10 +26,10 @@ export async function equipBestTool(bot, block) {
   }
 }
 
-export async function executeDeconstruction(bot, plan, sender, isWhisper, sendResponse, supervisor) {
+export async function executeDeconstruction(bot, plan, sender, isWhisper, sendResponse, supervisor, safeNav) {
   if (bot.inventory.emptySlotCount() === 0) {
     sendResponse(sender, 'Inventory full! Drop items before clearing.', isWhisper)
-    return
+    return 0
   }
   bot.autoEat?.disable?.() || bot.autoEat?.disableAuto?.()
   let clearedCount = 0
@@ -44,6 +44,16 @@ export async function executeDeconstruction(bot, plan, sender, isWhisper, sendRe
         continue
       }
 
+      // Check distance; navigate if too far away (> 4.2m)
+      if (bot.entity && bot.entity.position.distanceTo(targetVec) > 4.2) {
+        if (safeNav) {
+          await safeNav.navigateTo(targetVec)
+          if (bot.entity.position.distanceTo(targetVec) > 4.8) {
+            continue
+          }
+        }
+      }
+
       // Check for gravity hazard above
       const above = bot.blockAt(targetVec.offset(0, 1, 0))
       if (above && (above.name === 'sand' || above.name === 'gravel')) {
@@ -56,9 +66,14 @@ export async function executeDeconstruction(bot, plan, sender, isWhisper, sendRe
 
       try {
         await equipBestTool(bot, block)
-        await bot.dig(block)
-        clearedCount++
-        await new Promise(r => setTimeout(r, 80))
+        if (bot.canDigBlock ? bot.canDigBlock(block) : true) {
+          await bot.dig(block)
+          clearedCount++
+          if (clearedCount % 5 === 0) {
+            sendResponse(sender, `Cleared ${clearedCount} block(s)...`, isWhisper)
+          }
+          await new Promise(r => setTimeout(r, 80))
+        }
       } catch (err) {
         console.log(`[!] Dig error at ${targetVec}: ${err.message}`)
       }
@@ -68,6 +83,7 @@ export async function executeDeconstruction(bot, plan, sender, isWhisper, sendRe
   }
 
   sendResponse(sender, `Excavation complete! Cleared ${clearedCount} block(s).`, isWhisper)
+  return clearedCount
 }
 
 // Backward compatibility alias

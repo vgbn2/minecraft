@@ -1,4 +1,7 @@
-use mc_path_core::{astar_search, slice_trajectory, IVec3, SimpleVoxelWorld};
+use mc_path_core::{
+    astar_search, check_motion, generate_deconstruction_plan, is_human_player, is_squad_bot,
+    slice_trajectory, BotMode, FVec3, IVec3, SimpleVoxelWorld,
+};
 use std::env;
 use std::time::Instant;
 
@@ -8,6 +11,9 @@ fn print_usage() {
     eprintln!("Usage:");
     eprintln!("  mc-path-fast slice <x1> <y1> <z1> <x2> <y2> <z2> [max_hop]");
     eprintln!("  mc-path-fast slice-json <x1> <y1> <z1> <x2> <y2> <z2> [max_hop]");
+    eprintln!("  mc-path-fast watchdog <x1> <y1> <z1> <x2> <y2> <z2> <elapsed_s> <threshold_s> <mode> [is_digging]");
+    eprintln!("  mc-path-fast deconstruct <ox> <oy> <oz> <radius> <height>");
+    eprintln!("  mc-path-fast classify <name> [entity_type] [self_name]");
     eprintln!("  mc-path-fast bench [iterations]");
     eprintln!("  mc-path-fast --version");
 }
@@ -66,6 +72,73 @@ fn main() {
                 format!("{{\"x\":{},\"y\":{},\"z\":{},\"hopIndex\":{},\"totalHops\":{}}}", h.x, h.y, h.z, i + 1, hops.len())
             }).collect();
             println!("[{}]", json_elements.join(","));
+        }
+        "watchdog" => {
+            if args.len() < 11 {
+                eprintln!("Error: 'watchdog' requires <x1> <y1> <z1> <x2> <y2> <z2> <elapsed_s> <threshold_s> <mode> [is_digging]");
+                std::process::exit(1);
+            }
+            let x1: f64 = args[2].parse().unwrap_or(0.0);
+            let y1: f64 = args[3].parse().unwrap_or(64.0);
+            let z1: f64 = args[4].parse().unwrap_or(0.0);
+            let x2: f64 = args[5].parse().unwrap_or(0.0);
+            let y2: f64 = args[6].parse().unwrap_or(64.0);
+            let z2: f64 = args[7].parse().unwrap_or(0.0);
+            let elapsed_s: u64 = args[8].parse().unwrap_or(0);
+            let threshold_s: u64 = args[9].parse().unwrap_or(10);
+            let mode = BotMode::from_str(&args[10]);
+            let is_digging = args.get(11).map(|s| s == "true" || s == "1").unwrap_or(false);
+
+            let p1 = FVec3::new(x1, y1, z1);
+            let p2 = FVec3::new(x2, y2, z2);
+
+            let res = check_motion(Some(p1), p2, elapsed_s, threshold_s, mode, is_digging);
+            println!(
+                "{{\"isStationary\":{},\"hasMoved\":{},\"stationaryDurationSec\":{},\"isExempt\":{},\"isDigging\":{},\"isAlerting\":{},\"alertReason\":{}}}",
+                res.is_stationary,
+                res.has_moved,
+                res.stationary_duration_s,
+                res.is_exempt,
+                res.is_digging,
+                res.is_alerting,
+                res.alert_reason.map(|r| format!("\"{}\"", r)).unwrap_or_else(|| "null".to_string())
+            );
+        }
+        "deconstruct" => {
+            if args.len() < 7 {
+                eprintln!("Error: 'deconstruct' requires <ox> <oy> <oz> <radius> <height>");
+                std::process::exit(1);
+            }
+            let ox: i32 = args[2].parse().unwrap_or(0);
+            let oy: i32 = args[3].parse().unwrap_or(64);
+            let oz: i32 = args[4].parse().unwrap_or(0);
+            let radius: i32 = args[5].parse().unwrap_or(2);
+            let height: i32 = args[6].parse().unwrap_or(3);
+
+            let origin = IVec3::new(ox, oy, oz);
+            let plan = generate_deconstruction_plan(origin, radius, height);
+            let json_elements: Vec<String> = plan
+                .iter()
+                .map(|p| format!("{{\"x\":{},\"y\":{},\"z\":{}}}", p.x, p.y, p.z))
+                .collect();
+            println!("[{}]", json_elements.join(","));
+        }
+        "classify" => {
+            if args.len() < 3 {
+                eprintln!("Error: 'classify' requires <name> [entity_type] [self_name]");
+                std::process::exit(1);
+            }
+            let name = &args[2];
+            let entity_type = args.get(3).map(|s| s.as_str()).unwrap_or("player");
+            let self_name = args.get(4).map(|s| s.as_str());
+
+            let is_bot = is_squad_bot(name, self_name);
+            let is_human = is_human_player(name, entity_type, self_name);
+
+            println!(
+                "{{\"name\":\"{}\",\"isSquadBot\":{},\"isHumanPlayer\":{}}}",
+                name, is_bot, is_human
+            );
         }
         "bench" => {
             let iters: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(100);

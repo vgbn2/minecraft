@@ -18,6 +18,8 @@ import { sliceTrajectory, MAX_SAFE_HOP_DISTANCE, SafeNavigator } from '../src/ki
 import { WaypointGraph, generateDeconstructionPlan, PrompterSupervisor } from '../src/intelligence/supervisor.mjs'
 import { CombatEvasionController } from '../src/kinematics/combat_evasion.mjs'
 import { TacticalEscapeExcavator } from '../src/kinematics/tactical_escape.mjs'
+import { MotionWatchdog } from '../src/intelligence/motion_watchdog.mjs'
+import { isSquadBot, isHumanPlayer, getNearestHuman, formatEntitySurvey } from '../src/core/player_registry.mjs'
 import {
   CentralDepot,
   checkInventoryCapacity,
@@ -740,6 +742,100 @@ runTest('20x20 Survival House Blueprint Integrity & Dependency', () => {
   assert.ok(bill.stone === 324 && bill.cobblestone >= 76, 'Foundation floor breakdown must match 400 blocks')
   assert.ok(bill.oak_log >= 60, 'Pillars framing must contain at least 60 oak_log blocks')
   assert.ok(bill.glass >= 32, 'Windows and skylight must contain glass')
+})
+
+// ---------------------------------------------------------------------------
+// Gate 15: Motion Watchdog & AFK Farm Exemption Gate
+// ---------------------------------------------------------------------------
+console.log('\n--- Gate 15: Motion Watchdog & AFK Farm Exemption Gate ---')
+runTest('MotionWatchdog stationary alert with standby & farm AFK exemptions', () => {
+  let simulatedTime = 1000000
+  const now = () => simulatedTime
+  const mockBot = new EventEmitter()
+  mockBot.username = 'Arthur'
+  mockBot.entity = { position: { x: -240, y: 65, z: 97 } }
+  mockBot.targetDigBlock = null
+  mockBot.collectBlock = null
+
+  const alerts = []
+  const watchdog = new MotionWatchdog(mockBot, {
+    idleThresholdSec: 10,
+    now,
+    onAlert: (msg) => { if (msg) alerts.push(msg) }
+  })
+
+  // 1. Commanded standby exemption
+  watchdog.setMode('STANDBY', 'Commanded stop/stay')
+  simulatedTime += 25000
+  let st = watchdog.evaluateCheck()
+  assert.strictEqual(st.isAlerting, false, 'Standby must be exempt from alerts')
+  assert.strictEqual(st.isExempt, true)
+
+  // 2. Commanded AFK farm exemption
+  watchdog.setMode('AFK_FARM', 'AFK at wheat farm')
+  simulatedTime += 40000
+  st = watchdog.evaluateCheck()
+  assert.strictEqual(st.isAlerting, false, 'AFK at farm must be exempt from alerts')
+  assert.strictEqual(st.isExempt, true)
+
+  // 3. Active task triggers alert after 10s stationary
+  watchdog.setMode('TASK_ACTIVE', 'patrol')
+  simulatedTime += 12000
+  st = watchdog.evaluateCheck()
+  assert.strictEqual(st.isAlerting, true, 'Active task must alert after 10s standing still')
+  assert.strictEqual(st.isExempt, false)
+  assert.strictEqual(alerts.length, 1)
+
+  // 4. Moving clears alert
+  mockBot.entity.position.x = -230
+  simulatedTime += 1000
+  st = watchdog.evaluateCheck()
+  assert.strictEqual(st.isAlerting, false, 'Movement clears alert')
+  assert.strictEqual(st.stationaryDurationSec, 0)
+})
+
+// ---------------------------------------------------------------------------
+// Gate 16: Player vs Squad Bot Registry & Spatial Differentiation
+// ---------------------------------------------------------------------------
+console.log('\n--- Gate 16: Player vs Squad Bot Registry & Spatial Differentiation ---')
+runTest('Player vs bot classification, self-exclusion, and spatial entity survey segregation', () => {
+  // 1. Classification
+  assert.strictEqual(isSquadBot('Jotaro'), true)
+  assert.strictEqual(isSquadBot('Bob'), true)
+  assert.strictEqual(isSquadBot('Torin'), true)
+  assert.strictEqual(isSquadBot('Arthur'), true)
+  assert.strictEqual(isSquadBot('Willow'), true)
+  assert.strictEqual(isSquadBot('vgbn'), false)
+
+  assert.strictEqual(isHumanPlayer('vgbn'), true)
+  assert.strictEqual(isHumanPlayer('Bob'), false)
+
+  // 2. Spatial Nearest Selection ignores squad teammates
+  const mockSurveyBot = {
+    username: 'Jotaro',
+    entity: { position: { x: 0, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x, p.z) } },
+    entities: {
+      0: { username: 'Jotaro', type: 'player', position: { x: 0, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x, p.z) } },
+      1: { username: 'Bob', type: 'player', position: { x: 3, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x - 3, p.z) } },
+      2: { username: 'vgbn', type: 'player', position: { x: 10, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x - 10, p.z) } },
+      3: { name: 'zombie', type: 'mob', position: { x: 7, y: 64, z: 0, distanceTo: (p) => Math.hypot(p.x - 7, p.z) } }
+    }
+  }
+
+  const nearest = getNearestHuman(mockSurveyBot)
+  assert.ok(nearest, 'Nearest human must be discovered')
+  assert.strictEqual(nearest.username, 'vgbn', 'Nearest human must be vgbn, skipping teammate Bob')
+
+  // 3. Survey formatting segregates categories
+  const survey = formatEntitySurvey(mockSurveyBot, 20)
+  assert.strictEqual(survey.humans.length, 1)
+  assert.strictEqual(survey.humans[0], 'vgbn(10m)')
+  assert.strictEqual(survey.squad.length, 1)
+  assert.strictEqual(survey.squad[0], 'Bob(3m)')
+  assert.strictEqual(survey.mobs.length, 1)
+  assert.strictEqual(survey.mobs[0], 'zombie(7m)')
+  assert.ok(!survey.humans.includes('Jotaro'), 'Self must never appear in humans')
+  assert.ok(!survey.squad.includes('Jotaro'), 'Self must never appear in squadmates')
 })
 
 console.log(`\n=== SUMMARY: ${passedTests} PASSED, ${failedTests} FAILED ===`)

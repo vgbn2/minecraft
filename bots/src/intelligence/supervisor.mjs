@@ -139,16 +139,17 @@ export class WaypointGraph {
  * @param {number} height
  * @returns {Array<{x: number, y: number, z: number, distSq: number}>}
  */
-export function generateDeconstructionPlan(origin, radius = 3, height = 3) {
+export function generateDeconstructionPlan(origin, radius = 3, height = 3, depth = 0) {
   const r = Math.max(1, Math.min(radius || 3, 10))
   const h = Math.max(1, Math.min(height || 3, 10))
+  const d = Math.max(0, Math.min(depth !== undefined ? depth : 0, 5))
   const blocks = []
 
   const ox = Math.floor(origin.x)
   const oy = Math.floor(origin.y)
   const oz = Math.floor(origin.z)
 
-  for (let y = oy + h - 1; y >= oy; y--) {
+  for (let y = oy + h - 1; y >= oy - d; y--) {
     for (let dx = -r; dx <= r; dx++) {
       for (let dz = -r; dz <= r; dz++) {
         const x = ox + dx

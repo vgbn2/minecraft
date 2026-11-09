@@ -226,26 +226,116 @@ export class ScaffoldController {
   }
 }
 
+export function generateHouseClearancePlan(origin, options = {}) {
+  const width = options.width || 20
+  const length = options.length || 20
+  const height = options.height || 4
+  const includeFloor = options.includeFloor !== undefined ? options.includeFloor : false
+  const bot = options.bot || null
+  const sector = (options.sector || 'all').toLowerCase()
+
+  let minDx = 0, maxDx = width - 1
+  let minDz = 0, maxDz = length - 1
+
+  // Sector partitioning for squad collaboration
+  if (sector === 'nw' || sector === 'torin') {
+    maxDx = Math.floor(width / 2) - 1
+    maxDz = Math.floor(length / 2) - 1
+  } else if (sector === 'ne' || sector === 'arthur') {
+    minDx = Math.floor(width / 2)
+    maxDz = Math.floor(length / 2) - 1
+  } else if (sector === 'sw' || sector === 'willow') {
+    maxDx = Math.floor(width / 2) - 1
+    minDz = Math.floor(length / 2)
+  } else if (sector === 'se' || sector === 'bob') {
+    minDx = Math.floor(width / 2)
+    minDz = Math.floor(length / 2)
+  }
+
+  const ox = Math.floor(origin.x)
+  const oy = Math.floor(origin.y)
+  const oz = Math.floor(origin.z)
+  const blocks = []
+
+  const startDy = height
+  const endDy = includeFloor ? -1 : 0
+
+  for (let dy = startDy; dy >= endDy; dy--) {
+    for (let dx = minDx; dx <= maxDx; dx++) {
+      for (let dz = minDz; dz <= maxDz; dz++) {
+        const p = new Vec3(ox + dx, oy + dy, oz + dz)
+        if (bot?.blockAt) {
+          const b = bot.blockAt(p)
+          if (!b || b.name === 'air' || b.name === 'cave_air' || b.name === 'water' || b.name === 'lava') {
+            continue
+          }
+        }
+        blocks.push(p)
+      }
+    }
+  }
+
+  return blocks
+}
+
 export class AutonomousArchitectureRunner {
-  constructor(bot) {
+  constructor(bot, options = {}) {
     this.bot = bot
     this.scaffold = new ScaffoldController(bot)
+    this.safeNav = options.safeNav || null
   }
 
   async executePlan(plan, { onProgress } = {}) {
     let placed = 0
+    const items = this.bot.inventory?.items?.() || []
+    const hasBlocks = items.some(i =>
+      i.name.includes('cobble') ||
+      i.name.includes('stone') ||
+      i.name.includes('dirt') ||
+      i.name.includes('plank') ||
+      i.name.includes('log') ||
+      i.name.includes('glass') ||
+      i.name.includes('stairs')
+    )
+    if (!hasBlocks && this.bot.inventory && items.length > 0) {
+      return { success: false, placed: 0, total: plan.length, reason: 'no_materials' }
+    }
+
     for (const voxel of plan) {
+      if (this.bot.entity && this.bot.entity.position.distanceTo(voxel.pos) > 4.2 && this.safeNav) {
+        try { await this.safeNav.navigateTo(voxel.pos) } catch {}
+      }
+
+      // Find any usable building block in inventory
+      const curItems = this.bot.inventory?.items?.() || []
+      const blockItem = curItems.find(i =>
+        i.name.includes(voxel.name) ||
+        i.name.includes('cobble') ||
+        i.name.includes('stone') ||
+        i.name.includes('dirt') ||
+        i.name.includes('plank') ||
+        i.name.includes('log')
+      )
+      if (blockItem && this.bot.equip) {
+        try { await this.bot.equip(blockItem, 'hand') } catch {}
+      }
+
       const ref = findReferenceBlock(this.bot, voxel.pos)
-      if (ref) {
-        await this.bot.placeBlock(ref.referenceBlock, ref.faceVector)
+      if (ref && this.bot.placeBlock) {
+        try {
+          await this.bot.placeBlock(ref.referenceBlock, ref.faceVector)
+          placed++
+        } catch {}
       } else {
         const belowPos = voxel.pos.plus(new Vec3(0, -1, 0))
-        const belowBlock = this.bot.blockAt(belowPos)
-        if (belowBlock && belowBlock.name !== 'air') {
-          await this.bot.placeBlock(belowBlock, new Vec3(0, 1, 0))
+        const belowBlock = this.bot.blockAt ? this.bot.blockAt(belowPos) : null
+        if (belowBlock && belowBlock.name !== 'air' && this.bot.placeBlock) {
+          try {
+            await this.bot.placeBlock(belowBlock, new Vec3(0, 1, 0))
+            placed++
+          } catch {}
         }
       }
-      placed++
       if (onProgress) onProgress({ placed, total: plan.length, voxel })
     }
     return { success: true, placed, total: plan.length }

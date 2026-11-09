@@ -3,6 +3,7 @@ import assert from 'node:assert'
 import { Vec3 } from 'vec3'
 import {
   generateHouse20x20Plan,
+  generateHouseClearancePlan,
   verifyHousePlanIntegrity,
   calculateMaterialBill,
   AutonomousArchitectureRunner,
@@ -183,6 +184,30 @@ await testAsync('Gate 6: AutonomousArchitectureRunner execution simulation', asy
   assert.strictEqual(result.success, true, 'Runner should succeed on valid plan and inventory')
   assert.strictEqual(result.placed, 50, 'All 50 mock voxels should be placed')
   assert.strictEqual(progressCalls, 50, 'Progress callback should be triggered for each placed voxel')
+})
+
+// 7. House Site Clearance & Sector Decomposition
+test('Gate 7: House clearance plan & squad sector partitioning', () => {
+  const origin = new Vec3(-240, 65, 100)
+  const fullPlan = generateHouseClearancePlan(origin, { width: 20, length: 20, height: 3, sector: 'all' })
+  assert.strictEqual(fullPlan.length, 20 * 20 * 4, 'Full clearance: 20x20 footprint * 4 layers (dy: 0..3) = 1600 voxels')
+
+  // Sector partitioning
+  const nwPlan = generateHouseClearancePlan(origin, { width: 20, length: 20, height: 3, sector: 'NW' })
+  const nePlan = generateHouseClearancePlan(origin, { width: 20, length: 20, height: 3, sector: 'NE' })
+  const swPlan = generateHouseClearancePlan(origin, { width: 20, length: 20, height: 3, sector: 'SW' })
+  const sePlan = generateHouseClearancePlan(origin, { width: 20, length: 20, height: 3, sector: 'SE' })
+
+  assert.strictEqual(nwPlan.length, 10 * 10 * 4, 'NW Sector: 10x10 * 4 = 400 voxels')
+  assert.strictEqual(nePlan.length, 10 * 10 * 4, 'NE Sector: 10x10 * 4 = 400 voxels')
+  assert.strictEqual(swPlan.length, 10 * 10 * 4, 'SW Sector: 10x10 * 4 = 400 voxels')
+  assert.strictEqual(sePlan.length, 10 * 10 * 4, 'SE Sector: 10x10 * 4 = 400 voxels')
+  assert.strictEqual(nwPlan.length + nePlan.length + swPlan.length + sePlan.length, fullPlan.length, 'Sectors sum to full footprint')
+
+  // Top-down sort invariant
+  for (let i = 1; i < nwPlan.length; i++) {
+    assert.ok(nwPlan[i].y <= nwPlan[i - 1].y, 'Clearance plan must sort Y descending')
+  }
 })
 
 console.log(`\nVerification complete: ${passed} passed, ${failed} failed.`)

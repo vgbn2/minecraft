@@ -59,23 +59,14 @@ export function createBotInstance(options) {
     ...(version ? { version } : {})
   })
 
-  // ponytail: atomic 26.3 protocol sanitizer & tick_end fence; prevents invalid_player_movement & NaN poison (PR #4189)
+  // Suppress duplicate/unwanted packets on 26.3 protocol
   const origWrite = bot._client.write.bind(bot._client)
-  const acknowledgedTeleports = new Set()
-
   bot._client.write = (name, packet = {}) => {
     if (!bot._client || bot._client.state !== 'play') return origWrite(name, packet)
 
     // Suppress movement packets when bot entity is missing or dead
     if (['position', 'position_look', 'look', 'flying'].includes(name)) {
       if (!bot.entity || !bot.isAlive) return
-    }
-
-    // 1. Sanitize teleport_confirm: ensure 26.3 coordinates don't desync
-    if (name === 'teleport_confirm') {
-      const tpId = packet.teleportId
-      if (tpId !== undefined && acknowledgedTeleports.has(tpId)) return
-      if (tpId !== undefined) acknowledgedTeleports.add(tpId)
     }
 
     // 2. Fence tick_end: avoid duplicate unacknowledged frames on custom/Paper servers

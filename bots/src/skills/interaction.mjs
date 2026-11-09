@@ -3,6 +3,7 @@ import { Vec3 } from 'vec3'
 import pathfinderPkg from 'mineflayer-pathfinder'
 const { goals } = pathfinderPkg
 import { equipBestTool } from './deconstruction.mjs'
+import { getNearestHuman } from '../core/player_registry.mjs'
 
 export const UNBREAKABLE_BLOCKS = new Set([
   'bedrock', 'barrier', 'command_block', 'structure_block', 'end_portal_frame'
@@ -75,7 +76,7 @@ export async function activateNearestBlock(bot, typeOrName, targetVec, safeNav) 
 export async function giveItemsToPlayer(bot, itemName, count = 1, targetPlayerName, safeNav) {
   const pName = targetPlayerName
   const player = (pName && bot.players[pName]?.entity) ||
-                 bot.nearestEntity(e => (e.type === 'player' || e.name === 'player') && e !== bot.entity)
+                 getNearestHuman(bot)
   if (!player) return { success: false, reason: 'Player not found nearby' }
 
   if (bot.entity.position.distanceTo(player.position) > 3.0) {

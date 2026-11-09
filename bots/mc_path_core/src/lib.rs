@@ -302,6 +302,345 @@ pub struct FFIVec3 {
     pub z: i32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FVec3 {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+impl FVec3 {
+    pub const fn new(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+
+    #[inline(always)]
+    pub fn distance_to(&self, other: &Self) -> f64 {
+        let dx = self.x - other.x;
+        let dy = self.y - other.y;
+        let dz = self.z - other.z;
+        (dx * dx + dy * dy + dz * dz).sqrt()
+    }
+
+    #[inline(always)]
+    pub fn distance_xz(&self, other: &Self) -> f64 {
+        let dx = self.x - other.x;
+        let dz = self.z - other.z;
+        (dx * dx + dz * dz).sqrt()
+    }
+
+    #[inline(always)]
+    pub fn floored(&self) -> IVec3 {
+        IVec3::new(self.x.floor() as i32, self.y.floor() as i32, self.z.floor() as i32)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 1. Spatial Entity & Player vs Squad Bot Registry
+// ---------------------------------------------------------------------------
+
+pub const SQUAD_BOT_NAMES: [&str; 5] = ["jotaro", "bob", "torin", "arthur", "willow"];
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EntitySnapshot {
+    pub id: u32,
+    pub name: String,
+    pub username: Option<String>,
+    pub entity_type: String,
+    pub pos: FVec3,
+}
+
+impl EntitySnapshot {
+    pub fn new(id: u32, name: &str, username: Option<&str>, entity_type: &str, pos: FVec3) -> Self {
+        Self {
+            id,
+            name: name.to_string(),
+            username: username.map(|s| s.to_string()),
+            entity_type: entity_type.to_string(),
+            pos,
+        }
+    }
+}
+
+pub fn is_squad_bot(name: &str, self_name: Option<&str>) -> bool {
+    let lower = name.trim().to_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
+    if let Some(self_n) = self_name {
+        if lower == self_n.trim().to_lowercase() {
+            return true;
+        }
+    }
+    SQUAD_BOT_NAMES.iter().any(|&b| b == lower)
+}
+
+pub fn is_human_player(name: &str, entity_type: &str, self_name: Option<&str>) -> bool {
+    let is_player_like = entity_type == "player" || entity_type.is_empty();
+    if !is_player_like {
+        return false;
+    }
+    !is_squad_bot(name, self_name)
+}
+
+pub fn get_nearest_human<'a>(
+    self_pos: FVec3,
+    self_name: &str,
+    entities: &'a [EntitySnapshot],
+    max_dist: f64,
+) -> Option<&'a EntitySnapshot> {
+    let self_lower = self_name.trim().to_lowercase();
+    let mut nearest = None;
+    let mut min_dist = max_dist;
+
+    for entity in entities {
+        if let Some(ref u) = entity.username {
+            if u.trim().to_lowercase() == self_lower {
+                continue;
+            }
+        }
+        if entity.name.trim().to_lowercase() == self_lower {
+            continue;
+        }
+
+        let effective_name = entity.username.as_deref().unwrap_or(&entity.name);
+        if !is_human_player(effective_name, &entity.entity_type, Some(self_name)) {
+            continue;
+        }
+
+        let dist = self_pos.distance_to(&entity.pos);
+        if dist < min_dist {
+            min_dist = dist;
+            nearest = Some(entity);
+        }
+    }
+
+    nearest
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EntitySurveyResult {
+    pub humans: Vec<String>,
+    pub squad: Vec<String>,
+    pub mobs: Vec<String>,
+}
+
+pub fn format_entity_survey(
+    self_pos: FVec3,
+    self_name: &str,
+    entities: &[EntitySnapshot],
+    max_dist: f64,
+) -> EntitySurveyResult {
+    let self_lower = self_name.trim().to_lowercase();
+    let mut result = EntitySurveyResult::default();
+
+    for entity in entities {
+        if let Some(ref u) = entity.username {
+            if u.trim().to_lowercase() == self_lower {
+                continue;
+            }
+        }
+        if entity.name.trim().to_lowercase() == self_lower {
+            continue;
+        }
+
+        let dist = self_pos.distance_to(&entity.pos);
+        if dist > max_dist {
+            continue;
+        }
+
+        let dist_int = dist.round() as i32;
+        let effective_name = entity.username.as_deref().unwrap_or(&entity.name);
+
+        if is_human_player(effective_name, &entity.entity_type, Some(self_name)) {
+            result.humans.push(format!("{}({}m)", effective_name, dist_int));
+        } else if is_squad_bot(effective_name, Some(self_name)) {
+            result.squad.push(format!("{}({}m)", effective_name, dist_int));
+        } else {
+            result.mobs.push(format!("{}({}m)", effective_name, dist_int));
+        }
+    }
+
+    result
+}
+
+// ---------------------------------------------------------------------------
+// 2. Motion Watchdog & Stillness Coordinate Checker
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BotMode {
+    Standby,
+    AfkFarm,
+    TaskActive,
+    Idle,
+}
+
+impl BotMode {
+    pub fn is_exempt(&self) -> bool {
+        matches!(self, BotMode::Standby | BotMode::AfkFarm)
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "standby" => BotMode::Standby,
+            "afk_farm" | "afk" => BotMode::AfkFarm,
+            "task_active" | "task" => BotMode::TaskActive,
+            _ => BotMode::Idle,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MotionCheckResult {
+    pub is_stationary: bool,
+    pub has_moved: bool,
+    pub stationary_duration_s: u64,
+    pub is_exempt: bool,
+    pub is_digging: bool,
+    pub is_alerting: bool,
+    pub alert_reason: Option<String>,
+}
+
+pub fn check_motion(
+    prev_pos: Option<FVec3>,
+    curr_pos: FVec3,
+    stationary_elapsed_s: u64,
+    idle_threshold_s: u64,
+    mode: BotMode,
+    is_digging: bool,
+) -> MotionCheckResult {
+    let (has_moved, is_stationary) = match prev_pos {
+        Some(p) => {
+            let dist_xz = curr_pos.distance_xz(&p);
+            let moved = dist_xz >= 0.15;
+            (moved, !moved)
+        }
+        None => (false, true),
+    };
+
+    let is_exempt = mode.is_exempt();
+    let effective_still_s = if has_moved { 0 } else { stationary_elapsed_s };
+    let is_alerting = !is_exempt && !is_digging && effective_still_s >= idle_threshold_s;
+
+    let alert_reason = if is_alerting {
+        Some(format!(
+            "Stationary for {}s (threshold: {}s) in mode {:?} without standby/afk exemption",
+            effective_still_s, idle_threshold_s, mode
+        ))
+    } else {
+        None
+    };
+
+    MotionCheckResult {
+        is_stationary,
+        has_moved,
+        stationary_duration_s: effective_still_s,
+        is_exempt,
+        is_digging,
+        is_alerting,
+        alert_reason,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 3. Volumetric Deconstruction Coordinate Planner
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DeconstructTarget {
+    pub pos: IVec3,
+    pub dist_sq: i32,
+}
+
+pub fn generate_deconstruction_plan(origin: IVec3, radius: i32, height: i32) -> Vec<IVec3> {
+    let r = radius.max(1);
+    let h = height.max(1);
+    let total_blocks = (2 * r + 1) * (2 * r + 1) * h;
+    let mut targets = Vec::with_capacity(total_blocks as usize);
+
+    for dy in (0..h).rev() {
+        let y = origin.y + dy;
+        for dx in -r..=r {
+            for dz in -r..=r {
+                let x = origin.x + dx;
+                let z = origin.z + dz;
+                let dist_sq = dx * dx + dz * dz;
+                targets.push(DeconstructTarget {
+                    pos: IVec3::new(x, y, z),
+                    dist_sq,
+                });
+            }
+        }
+    }
+
+    // Sort strictly Y descending first (top-down), then closest to center column
+    targets.sort_by(|a, b| {
+        b.pos.y.cmp(&a.pos.y)
+            .then_with(|| a.dist_sq.cmp(&b.dist_sq))
+    });
+
+    targets.into_iter().map(|t| t.pos).collect()
+}
+
+// ---------------------------------------------------------------------------
+// 4. Combat Golden Spacing Coordinate Planner
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CombatSpacingAction {
+    Hold,
+    Advance(FVec3),
+    Backpedal(FVec3),
+    Flee(FVec3),
+}
+
+pub fn compute_combat_spacing(
+    bot_pos: FVec3,
+    target_pos: FVec3,
+    is_creeper: bool,
+    golden_min: f64,
+    golden_max: f64,
+) -> CombatSpacingAction {
+    let dist = bot_pos.distance_xz(&target_pos);
+    if dist < 0.001 {
+        return CombatSpacingAction::Backpedal(FVec3::new(bot_pos.x, bot_pos.y, bot_pos.z + 1.0));
+    }
+
+    let ux = (bot_pos.x - target_pos.x) / dist;
+    let uz = (bot_pos.z - target_pos.z) / dist;
+
+    if is_creeper {
+        if dist < 6.5 {
+            return CombatSpacingAction::Flee(FVec3::new(
+                target_pos.x + ux * 8.0,
+                bot_pos.y,
+                target_pos.z + uz * 8.0,
+            ));
+        } else {
+            return CombatSpacingAction::Hold;
+        }
+    }
+
+    if dist < golden_min {
+        let target_dist = (golden_min + golden_max) * 0.5;
+        CombatSpacingAction::Backpedal(FVec3::new(
+            target_pos.x + ux * target_dist,
+            bot_pos.y,
+            target_pos.z + uz * target_dist,
+        ))
+    } else if dist > golden_max {
+        let target_dist = (golden_min + golden_max) * 0.5;
+        CombatSpacingAction::Advance(FVec3::new(
+            target_pos.x + ux * target_dist,
+            bot_pos.y,
+            target_pos.z + uz * target_dist,
+        ))
+    } else {
+        CombatSpacingAction::Hold
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn mc_path_slice_trajectory(
     start: FFIVec3,
@@ -406,6 +745,142 @@ mod tests {
                     "Pathfinder should avoid walking across tree leaves when ground route exists"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn test_player_bot_classification() {
+        assert!(is_squad_bot("Jotaro", None));
+        assert!(is_squad_bot("bob", None));
+        assert!(is_squad_bot("TORIN", None));
+        assert!(is_squad_bot("Arthur", None));
+        assert!(is_squad_bot("Willow", None));
+        assert!(!is_squad_bot("vgbn", None));
+        assert!(!is_squad_bot("Steve", None));
+
+        // Self-identification
+        assert!(is_squad_bot("OperatorBot", Some("OperatorBot")));
+
+        assert!(is_human_player("vgbn", "player", None));
+        assert!(is_human_player("Steve", "player", None));
+        assert!(!is_human_player("Bob", "player", None));
+        assert!(!is_human_player("zombie", "mob", None));
+    }
+
+    #[test]
+    fn test_nearest_human_selection() {
+        let self_pos = FVec3::new(0.0, 64.0, 0.0);
+        let entities = vec![
+            EntitySnapshot::new(1, "Jotaro", Some("Jotaro"), "player", FVec3::new(0.0, 64.0, 0.0)),
+            EntitySnapshot::new(2, "Bob", Some("Bob"), "player", FVec3::new(2.0, 64.0, 0.0)),
+            EntitySnapshot::new(3, "Torin", Some("Torin"), "player", FVec3::new(4.0, 64.0, 0.0)),
+            EntitySnapshot::new(4, "vgbn", Some("vgbn"), "player", FVec3::new(12.0, 64.0, 0.0)),
+            EntitySnapshot::new(5, "zombie", None, "mob", FVec3::new(6.0, 64.0, 0.0)),
+        ];
+
+        let nearest = get_nearest_human(self_pos, "Jotaro", &entities, 50.0);
+        assert!(nearest.is_some(), "Must locate nearest human player");
+        assert_eq!(nearest.unwrap().username.as_deref(), Some("vgbn"));
+    }
+
+    #[test]
+    fn test_entity_survey_partitioning() {
+        let self_pos = FVec3::new(0.0, 64.0, 0.0);
+        let entities = vec![
+            EntitySnapshot::new(1, "Jotaro", Some("Jotaro"), "player", FVec3::new(0.0, 64.0, 0.0)),
+            EntitySnapshot::new(2, "bOb", Some("bOb"), "player", FVec3::new(3.0, 64.0, 0.0)),
+            EntitySnapshot::new(3, "vgbn", Some("vgbn"), "player", FVec3::new(10.0, 64.0, 0.0)),
+            EntitySnapshot::new(4, "creeper", None, "mob", FVec3::new(7.0, 64.0, 0.0)),
+            EntitySnapshot::new(5, "far_player", Some("far_player"), "player", FVec3::new(50.0, 64.0, 0.0)),
+        ];
+
+        let survey = format_entity_survey(self_pos, "Jotaro", &entities, 20.0);
+        assert_eq!(survey.humans.len(), 1, "Exactly 1 human within 20m");
+        assert_eq!(survey.humans[0], "vgbn(10m)");
+        assert_eq!(survey.squad.len(), 1, "Self excluded, only bOb in squad");
+        assert_eq!(survey.squad[0], "bOb(3m)");
+        assert_eq!(survey.mobs.len(), 1);
+        assert_eq!(survey.mobs[0], "creeper(7m)");
+        assert!(!survey.humans.iter().any(|h| h.contains("far_player")));
+    }
+
+    #[test]
+    fn test_motion_watchdog_checker() {
+        let p1 = FVec3::new(10.0, 64.0, 20.0);
+
+        // 1. Commanded Standby is exempt
+        let res_standby = check_motion(Some(p1), p1, 30, 10, BotMode::Standby, false);
+        assert!(!res_standby.is_alerting, "Standby must be exempt from alerts");
+        assert!(res_standby.is_exempt);
+        assert!(res_standby.is_stationary);
+
+        // 2. Commanded AFK farm is exempt
+        let res_afk = check_motion(Some(p1), p1, 60, 10, BotMode::AfkFarm, false);
+        assert!(!res_afk.is_alerting, "AFK farm must be exempt");
+        assert!(res_afk.is_exempt);
+
+        // 3. Active task under threshold does NOT alert
+        let res_under = check_motion(Some(p1), p1, 5, 10, BotMode::TaskActive, false);
+        assert!(!res_under.is_alerting);
+
+        // 4. Active task over threshold triggers alert
+        let res_over = check_motion(Some(p1), p1, 15, 10, BotMode::TaskActive, false);
+        assert!(res_over.is_alerting, "Stationary for 15s >= 10s must alert");
+        assert_eq!(res_over.stationary_duration_s, 15);
+
+        // 5. Legitimate digging is exempt
+        let res_dig = check_motion(Some(p1), p1, 20, 10, BotMode::TaskActive, true);
+        assert!(!res_dig.is_alerting, "Digging blocks is exempt");
+
+        // 6. Movement resets stationary duration and clears alert
+        let p2 = FVec3::new(15.0, 64.0, 20.0);
+        let res_move = check_motion(Some(p1), p2, 15, 10, BotMode::TaskActive, false);
+        assert!(!res_move.is_alerting);
+        assert!(res_move.has_moved);
+        assert_eq!(res_move.stationary_duration_s, 0);
+    }
+
+    #[test]
+    fn test_volumetric_deconstruction_plan() {
+        let origin = IVec3::new(100, 64, 200);
+        let plan = generate_deconstruction_plan(origin, 2, 3);
+
+        // (2*2+1)^2 * 3 = 25 * 3 = 75 blocks
+        assert_eq!(plan.len(), 75);
+
+        // First block must be highest Y (64 + 3 - 1 = 66) and center (100, 66, 200)
+        assert_eq!(plan[0], IVec3::new(100, 66, 200));
+
+        // Verify strictly non-increasing Y order
+        for i in 1..plan.len() {
+            assert!(plan[i].y <= plan[i - 1].y, "Plan must sort top-down (Y descending)");
+        }
+    }
+
+    #[test]
+    fn test_combat_golden_spacing() {
+        let bot = FVec3::new(0.0, 64.0, 0.0);
+
+        // In golden range [2.6, 2.95] -> Hold
+        let zombie_ok = FVec3::new(0.0, 64.0, 2.8);
+        assert_eq!(compute_combat_spacing(bot, zombie_ok, false, 2.6, 2.95), CombatSpacingAction::Hold);
+
+        // Too close (< 2.6) -> Backpedal
+        let zombie_close = FVec3::new(0.0, 64.0, 1.5);
+        match compute_combat_spacing(bot, zombie_close, false, 2.6, 2.95) {
+            CombatSpacingAction::Backpedal(dest) => {
+                assert!(dest.z < 0.0, "Must step backwards away from enemy");
+            }
+            other => panic!("Expected Backpedal, got {:?}", other),
+        }
+
+        // Creeper close (< 6.5) -> Flee
+        let creeper_near = FVec3::new(0.0, 64.0, 4.0);
+        match compute_combat_spacing(bot, creeper_near, true, 2.6, 2.95) {
+            CombatSpacingAction::Flee(dest) => {
+                assert!(dest.z < 0.0, "Must flee away from creeper");
+            }
+            other => panic!("Expected Flee, got {:?}", other),
         }
     }
 }

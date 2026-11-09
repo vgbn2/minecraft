@@ -7,6 +7,7 @@ import { breakBlockAt, inspectTargetBlock, activateNearestBlock, giveItemsToPlay
 import { bootstrapTools, establishHydratedFarm, harvestAndReplant, craftBreadFromWheat } from '../skills/agriculture_tech.mjs'
 import { IpcManager } from '../core/ipc.mjs'
 import { TOOLS_SCHEMA } from './tools_schema.mjs'
+import { isSquadBot, isHumanPlayer, getNearestHuman, formatEntitySurvey } from '../core/player_registry.mjs'
 
 export class AIAgent {
   constructor(bot, config, personality, options = {}) {
@@ -16,21 +17,22 @@ export class AIAgent {
     this.safeNav = options.safeNav
     this.supervisor = options.supervisor
     this.sendResponse = options.sendResponse
+    this.watchdog = options.watchdog
     this.tokenTotals = { prompt: 0, completion: 0, total: 0, calls: 0, lastLatency: 0 }
   }
 
   getEnvironmentContext(sender) {
-    const player = this.bot.players[sender]?.entity
+    const isHumanSender = sender && !isSquadBot(sender)
+    const player = isHumanSender ? this.bot.players[sender]?.entity : getNearestHuman(this.bot)
     const items = this.bot.inventory.items().map(i => `${i.name}x${i.count}`).join(', ') || 'empty'
     const supervisorContext = this.supervisor?.formatSupervisorContext ? this.supervisor.formatSupervisorContext(sender) : (this.supervisor?.getContextSummary ? this.supervisor.getContextSummary(sender) : 'No spatial landmarks.')
 
-    const nearbyMobs = Object.values(this.bot.entities)
-      .filter(e => e !== this.bot.entity && e.position && e.position.distanceTo(this.bot.entity.position) < 16)
-      .map(e => `${e.name || e.type}(${Math.round(e.position.distanceTo(this.bot.entity.position))}m)`)
-      .slice(0, 5)
-      .join(', ') || 'none'
+    const survey = formatEntitySurvey(this.bot, 24)
+    const humansStr = survey.humans.length ? `Humans: [${survey.humans.join(', ')}]` : 'No humans nearby'
+    const squadStr = survey.squad.length ? `Teammates: [${survey.squad.join(', ')}]` : 'Teammates: none'
+    const mobsStr = survey.mobs.length ? `Mobs: [${survey.mobs.slice(0, 5).join(', ')}]` : 'Mobs: none'
 
-    return `${supervisorContext}. Inventory: [${items}]. Nearby entities: [${nearbyMobs}]. Talking player: '${sender}' (distance: ${player ? Math.round(player.position.distanceTo(this.bot.entity.position)) + 'm' : 'unseen'}).`
+    return `${supervisorContext}. Inventory: [${items}]. ${humansStr}. ${squadStr}. ${mobsStr}. Direct caller: '${sender}' (distance: ${player ? Math.round(player.position.distanceTo(this.bot.entity.position)) + 'm' : 'unseen'}).`
   }
 
   async executeToolCall(toolCall, sender, isWhisper) {
@@ -44,17 +46,29 @@ export class AIAgent {
 
     console.log(`[AI EXEC] ${name}(${JSON.stringify(args)})`)
 
+    if (this.watchdog) {
+      if (name === 'stay' || name === 'stop') {
+        this.watchdog.setMode('STANDBY', 'Commanded stop/stay')
+      } else if (name !== 'reply_chat') {
+        this.watchdog.setMode('TASK_ACTIVE', `${name}:${JSON.stringify(args)}`)
+      }
+    }
+
     switch (name) {
       case 'reply_chat': {
         this.sendResponse(sender, args.message, isWhisper)
         break
       }
       case 'follow_player': {
-        const p = this.bot.players[sender]?.entity ||
-                  this.bot.nearestEntity(e => (e.type === 'player' || e.name === 'player') && e !== this.bot.entity)
+        const targetName = args.player_name || sender
+        const isHumanTarget = targetName && !isSquadBot(targetName)
+        const p = (isHumanTarget && this.bot.players[targetName]?.entity) ||
+                  getNearestHuman(this.bot)
         if (p && this.safeNav) {
-          this.sendResponse(sender, `Following ${p.username || sender}...`, isWhisper)
+          this.sendResponse(sender, `Following ${p.username || targetName}...`, isWhisper)
           this.safeNav.navigateTo(p.position.floored())
+        } else {
+          this.sendResponse(sender, `No player in sight to follow.`, isWhisper)
         }
         break
       }
@@ -80,8 +94,21 @@ export class AIAgent {
         if (entity && this.bot.pvp) {
           this.sendResponse(sender, `Attacking ${entity.name || mobName}!`, isWhisper)
           this.bot.pvp.attack(entity)
+          const onStop = () => {
+            this.bot.removeListener('stoppedAttacking', onStop)
+            this.watchdog?.setMode('IDLE')
+            this.sendResponse(sender, `Finished combat with ${entity.name || mobName}.`, isWhisper)
+          }
+          this.bot.once('stoppedAttacking', onStop)
+          setTimeout(() => {
+            if (this.bot.pvp?.target === entity) {
+              this.bot.pvp.stop()
+              this.watchdog?.setMode('IDLE')
+            }
+          }, 30000)
         } else {
           this.sendResponse(sender, `No ${mobName} found nearby.`, isWhisper)
+          this.watchdog?.setMode('IDLE')
         }
         break
       }
@@ -91,15 +118,19 @@ export class AIAgent {
         const blockType = this.bot.registry?.blocksByName?.[rawName]
         if (!blockType) {
           this.sendResponse(sender, `Unknown block type: ${rawName}`, isWhisper)
+          this.watchdog?.setMode('IDLE')
           return
         }
+        // Cap maxDistance to 16 to avoid loading millions of blocks (OOM crash)
+        const searchDist = 16
         const targets = this.bot.findBlocks({
           matching: blockType.id,
-          maxDistance: this.config.max_distance,
+          maxDistance: searchDist,
           count: targetCount
         })
         if (!targets || targets.length === 0) {
-          this.sendResponse(sender, `No ${rawName} found within ${this.config.max_distance} blocks.`, isWhisper)
+          this.sendResponse(sender, `No ${rawName} found within ${searchDist} blocks.`, isWhisper)
+          this.watchdog?.setMode('IDLE')
           return
         }
         this.sendResponse(sender, `Found ${targets.length} ${rawName}(s). Mining...`, isWhisper)
@@ -109,6 +140,8 @@ export class AIAgent {
           this.sendResponse(sender, `Finished collecting ${rawName}!`, isWhisper)
         } catch (err) {
           this.sendResponse(sender, `Failed collecting ${rawName}: ${err.message}`, isWhisper)
+        } finally {
+          this.watchdog?.setMode('IDLE')
         }
         break
       }
